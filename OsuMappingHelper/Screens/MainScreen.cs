@@ -71,14 +71,7 @@ public partial class MainScreen : osu.Framework.Screens.Screen
 
         InternalChildren = new Drawable[]
         {
-            // Custom osu!-styled title bar (on top)
-            _titleBar = new CustomTitleBar
-            {
-                Anchor = Anchor.TopLeft,
-                Origin = Anchor.TopLeft,
-                Alpha = 1f // Visible by default, will be hidden in overlay mode
-            },
-            // Dark background (transparent in overlay mode)
+            // Dark background (transparent in overlay mode) - must be first (behind everything)
             _backgroundBox = new Box
             {
                 RelativeSizeAxes = Axes.Both,
@@ -142,6 +135,13 @@ public partial class MainScreen : osu.Framework.Screens.Screen
             },
             // App footer (bottom of screen)
             _appFooter = new AppFooter(),
+            // Custom osu!-styled title bar (on top of content, visible in non-overlay mode)
+            _titleBar = new CustomTitleBar
+            {
+                Anchor = Anchor.TopLeft,
+                Origin = Anchor.TopLeft,
+                Alpha = 1f // Visible by default, will be hidden in overlay mode
+            },
             // Loading overlay (on top of everything)
             _loadingOverlay = new LoadingOverlay()
         };
@@ -155,12 +155,14 @@ public partial class MainScreen : osu.Framework.Screens.Screen
         _rateChangerPanel.PreviewRequested += OnRatePreviewRequested;
         _rateChangerPanel.FormatChanged += OnRateChangerFormatChanged;
         _bulkRateChangerPanel.ApplyBulkRateClicked += OnApplyBulkRateClicked;
+        _bulkRateChangerPanel.FormatChanged += OnRateChangerFormatChanged;
 
-        // Restore saved rate changer format
+        // Restore saved rate changer format to both panels
         var savedFormat = UserSettingsService.Settings.RateChangerFormat;
         if (!string.IsNullOrWhiteSpace(savedFormat))
         {
             _rateChangerPanel.SetFormat(savedFormat);
+            _bulkRateChangerPanel.SetFormat(savedFormat);
         }
 
         // Try to attach to osu! process
@@ -277,6 +279,7 @@ public partial class MainScreen : osu.Framework.Screens.Screen
         {
             var info = ProcessDetector.GetProcessInfo();
             _statusDisplay.SetStatus($"Connected to osu! (PID: {info?.ProcessId})", StatusType.Success);
+            _mapInfoDisplay.SetConnected();
 
             // Subscribe to file modification events
             ProcessDetector.BeatmapFileModified += OnBeatmapFileModified;
@@ -300,6 +303,7 @@ public partial class MainScreen : osu.Framework.Screens.Screen
         else
         {
             _statusDisplay.SetStatus("osu! not detected. Drop a .osu file to get started.", StatusType.Warning);
+            _mapInfoDisplay.SetNotConnected();
         }
     }
 
@@ -789,15 +793,25 @@ public partial class MainScreen : osu.Framework.Screens.Screen
     {
         if (!ProcessDetector.IsOsuRunning)
         {
+            // Show not connected overlay if no beatmap is loaded
+            if (_currentOsuFile == null)
+            {
+                _mapInfoDisplay.SetNotConnected();
+            }
+            
             // Try to reattach if osu! was closed and reopened
             if (ProcessDetector.TryAttachToOsu())
             {
                 var info = ProcessDetector.GetProcessInfo();
                 _statusDisplay.SetStatus($"Reconnected to osu! (PID: {info?.ProcessId})", StatusType.Success);
+                _mapInfoDisplay.SetConnected();
                 ProcessDetector.BeatmapFileModified += OnBeatmapFileModified;
             }
             return;
         }
+        
+        // osu! is running, ensure overlay is hidden
+        _mapInfoDisplay.SetConnected();
 
         string? detectedBeatmap = null;
         string source = "";

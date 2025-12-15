@@ -33,6 +33,9 @@ public partial class MapInfoDisplay : CompositeDrawable
     // Background
     private Sprite _backgroundSprite = null!;
     private Box _backgroundDimOverlay = null!;
+    
+    // Not connected overlay
+    private Container _notConnectedOverlay = null!;
 
     // MSD Chart
     private MsdChart _msdChart = null!;
@@ -245,6 +248,49 @@ public partial class MapInfoDisplay : CompositeDrawable
                 Anchor = Anchor.BottomLeft,
                 Origin = Anchor.BottomLeft,
                 Colour = _accentColor
+            },
+            // Not connected overlay (hidden by default)
+            _notConnectedOverlay = new Container
+            {
+                RelativeSizeAxes = Axes.Both,
+                Alpha = 0,
+                Children = new Drawable[]
+                {
+                    // Dark semi-transparent background
+                    new Box
+                    {
+                        RelativeSizeAxes = Axes.Both,
+                        Colour = new Color4(20, 18, 25, 230)
+                    },
+                    // Centered message
+                    new FillFlowContainer
+                    {
+                        Anchor = Anchor.Centre,
+                        Origin = Anchor.Centre,
+                        AutoSizeAxes = Axes.Both,
+                        Direction = FillDirection.Vertical,
+                        Spacing = new Vector2(0, 8),
+                        Children = new Drawable[]
+                        {
+                            new SpriteText
+                            {
+                                Text = "osu! not connected !!",
+                                Font = new FontUsage("", 36, "Bold"),
+                                Colour = new Color4(255, 100, 100, 255),
+                                Anchor = Anchor.Centre,
+                                Origin = Anchor.Centre
+                            },
+                            new SpriteText
+                            {
+                                Text = "Start osu! or drop a .osu file",
+                                Font = new FontUsage("", 16),
+                                Colour = new Color4(180, 180, 180, 255),
+                                Anchor = Anchor.Centre,
+                                Origin = Anchor.Centre
+                            }
+                        }
+                    }
+                }
             }
         };
     }
@@ -252,6 +298,9 @@ public partial class MapInfoDisplay : CompositeDrawable
     public void SetMapInfo(OsuFile osuFile)
     {
         _currentOsuFile = osuFile;
+        
+        // Hide not connected overlay when a map is loaded
+        _notConnectedOverlay.FadeTo(0, 200);
         
         // Use romanized (ASCII) variants for display
         var artist = !string.IsNullOrEmpty(osuFile.Artist) ? osuFile.Artist : osuFile.ArtistUnicode;
@@ -401,6 +450,25 @@ public partial class MapInfoDisplay : CompositeDrawable
         ClearBackground();
         ClearMsdAnalysis();
         ClearPatternAnalysis();
+        
+        // Hide not connected overlay
+        _notConnectedOverlay.FadeTo(0, 200);
+    }
+    
+    /// <summary>
+    /// Shows the "osu! not connected" overlay.
+    /// </summary>
+    public void SetNotConnected()
+    {
+        _notConnectedOverlay.FadeTo(1, 200);
+    }
+    
+    /// <summary>
+    /// Hides the "osu! not connected" overlay.
+    /// </summary>
+    public void SetConnected()
+    {
+        _notConnectedOverlay.FadeTo(0, 200);
     }
 
     private void LoadMsdAnalysis(OsuFile osuFile)

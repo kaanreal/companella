@@ -25,6 +25,11 @@ public partial class BulkRateChangerPanel : CompositeDrawable
     private SpriteText _countText = null!;
 
     public event Action<double, double, double, string>? ApplyBulkRateClicked;
+    
+    /// <summary>
+    /// Event fired when the format string changes.
+    /// </summary>
+    public event Action<string>? FormatChanged;
 
     private double _minRate = 0.5;
     private double _maxRate = 1.5;
@@ -309,6 +314,19 @@ public partial class BulkRateChangerPanel : CompositeDrawable
             _format = RateChanger.DefaultNameFormat;
             _formatTextBox.Text = _format;
         }
+        FormatChanged?.Invoke(_format);
+    }
+
+    /// <summary>
+    /// Sets the format string (used to restore saved format).
+    /// </summary>
+    public void SetFormat(string format)
+    {
+        if (string.IsNullOrWhiteSpace(format))
+            format = RateChanger.DefaultNameFormat;
+        
+        _format = format;
+        _formatTextBox.Text = format;
     }
 
     private void UpdatePreview()

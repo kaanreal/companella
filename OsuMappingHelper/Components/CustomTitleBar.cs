@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.Runtime.InteropServices;
 using osu.Framework.Allocation;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
@@ -22,16 +24,23 @@ public partial class CustomTitleBar : CompositeDrawable
     
     private IWindow? _window;
     private SpriteText _titleText = null!;
-    private SpriteText _maximizeButtonText = null!;
-    private WindowButton _minimizeButton = null!;
-    private WindowButton _maximizeButton = null!;
     private WindowButton _closeButton = null!;
-    
-    private bool _isDragging;
-    private Vector2 _dragStartPosition;
 
     [Resolved]
     private GameHost Host { get; set; } = null!;
+
+    // Windows API for native window dragging
+    [DllImport("user32.dll")]
+    private static extern bool ReleaseCapture();
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr SendMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr FindWindow(string? lpClassName, string lpWindowName);
+
+    private const uint WM_NCLBUTTONDOWN = 0x00A1;
+    private const int HTCAPTION = 0x0002;
 
     [BackgroundDependencyLoader]
     private void load()
@@ -44,25 +53,6 @@ public partial class CustomTitleBar : CompositeDrawable
         Origin = Anchor.TopLeft;
 
         // Create window control buttons
-        _minimizeButton = CreateWindowButton("−", Anchor.TopRight, () =>
-        {
-            Schedule(() =>
-            {
-                // Minimize functionality - may need platform-specific implementation
-                // For now, we'll hide the minimize button functionality
-                // if (_window != null)
-                //     _window.WindowState = osu.Framework.Platform.WindowState.Minimized;
-            });
-        });
-        _minimizeButton.Anchor = Anchor.TopRight;
-        _minimizeButton.Origin = Anchor.TopRight;
-        _minimizeButton.X = -80;
-
-        _maximizeButton = CreateMaximizeButton();
-        _maximizeButton.Anchor = Anchor.TopRight;
-        _maximizeButton.Origin = Anchor.TopRight;
-        _maximizeButton.X = -40;
-
         _closeButton = CreateWindowButton("×", Anchor.TopRight, () =>
         {
             Schedule(() => Host.Exit());
@@ -91,7 +81,7 @@ public partial class CustomTitleBar : CompositeDrawable
             new Container
             {
                 RelativeSizeAxes = Axes.Both,
-                Padding = new MarginPadding { Left = 15, Right = 120 }, // Right padding for buttons
+                Padding = new MarginPadding { Left = 15, Right = 45 }, // Right padding for close button
                 Child = _titleText = new SpriteText
                 {
                     Anchor = Anchor.CentreLeft,
@@ -105,55 +95,15 @@ public partial class CustomTitleBar : CompositeDrawable
             new Container
             {
                 RelativeSizeAxes = Axes.Y,
-                Width = 120,
+                Width = 40,
                 Anchor = Anchor.TopRight,
                 Origin = Anchor.TopRight,
                 Children = new Drawable[]
                 {
-                    _minimizeButton,
-                    _maximizeButton,
                     _closeButton
                 }
             }
         };
-    }
-
-    private WindowButton CreateMaximizeButton()
-    {
-        return new WindowButton(_hoverColor, () =>
-        {
-            Schedule(() =>
-            {
-                if (_window != null)
-                {
-                    _window.WindowState = _window.WindowState == osu.Framework.Platform.WindowState.Fullscreen 
-                        ? osu.Framework.Platform.WindowState.Normal 
-                        : osu.Framework.Platform.WindowState.Fullscreen;
-                    UpdateMaximizeButtonText();
-                }
-            });
-        })
-        {
-            Size = new Vector2(40, 32),
-            Anchor = Anchor.TopRight,
-            Origin = Anchor.TopRight,
-            Child = _maximizeButtonText = new SpriteText
-            {
-                Anchor = Anchor.Centre,
-                Origin = Anchor.Centre,
-                Text = "□",
-                Font = new FontUsage("", 16, "Bold"),
-                Colour = new Color4(200, 200, 200, 255)
-            }
-        };
-    }
-
-    private void UpdateMaximizeButtonText()
-    {
-        if (_window != null && _maximizeButtonText != null)
-        {
-            _maximizeButtonText.Text = _window.WindowState == osu.Framework.Platform.WindowState.Fullscreen ? "❐" : "□";
-        }
     }
 
     private WindowButton CreateWindowButton(string text, Anchor anchor, Action onClick, bool isCloseButton = false)
@@ -174,39 +124,61 @@ public partial class CustomTitleBar : CompositeDrawable
         };
     }
 
-    protected override bool OnDragStart(DragStartEvent e)
-    {
-        if (_window != null)
-        {
-            _isDragging = true;
-            _dragStartPosition = e.ScreenSpaceMousePosition;
-            // Note: Window positioning API may vary by platform
-            // For now, we'll just track the drag but not move the window
-            return true;
-        }
-        return base.OnDragStart(e);
-    }
-
-    protected override void OnDrag(DragEvent e)
-    {
-        if (_isDragging && _window != null)
-        {
-            // Window dragging would require platform-specific implementation
-            // This is a placeholder for future implementation
-        }
-        base.OnDrag(e);
-    }
-
-    protected override void OnDragEnd(DragEndEvent e)
-    {
-        _isDragging = false;
-        base.OnDragEnd(e);
-    }
-
     protected override bool OnMouseDown(MouseDownEvent e)
     {
-        // Allow dragging from anywhere on the title bar
-        return true;
+        if (e.Button == osuTK.Input.MouseButton.Left)
+        {
+            // Start native Windows window drag
+            StartWindowDrag();
+            return true;
+        }
+        return base.OnMouseDown(e);
+    }
+
+    /// <summary>
+    /// Initiates native Windows window dragging.
+    /// </summary>
+    private void StartWindowDrag()
+    {
+        if (_window == null) return;
+
+        try
+        {
+            // Find window handle by title
+            var handle = FindWindow(null, _window.Title);
+            if (handle == IntPtr.Zero)
+            {
+                // Try to find by process
+                handle = GetCurrentProcessMainWindowHandle();
+            }
+
+            if (handle != IntPtr.Zero)
+            {
+                // Release mouse capture and send message to start native drag
+                ReleaseCapture();
+                SendMessage(handle, WM_NCLBUTTONDOWN, (IntPtr)HTCAPTION, IntPtr.Zero);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[TitleBar] Error starting window drag: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Gets the main window handle of the current process.
+    /// </summary>
+    private static IntPtr GetCurrentProcessMainWindowHandle()
+    {
+        try
+        {
+            using var process = Process.GetCurrentProcess();
+            return process.MainWindowHandle;
+        }
+        catch
+        {
+            return IntPtr.Zero;
+        }
     }
 }
 

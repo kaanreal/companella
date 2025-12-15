@@ -94,9 +94,9 @@ public partial class DropZone : CompositeDrawable
         if (filePath.EndsWith(".osu", StringComparison.OrdinalIgnoreCase))
         {
             // Flash the border to indicate file was received
-            _borderContainer.TransformTo(nameof(_borderContainer.BorderColour), _borderActiveColor, 50)
-                .Then()
-                .TransformTo(nameof(_borderContainer.BorderColour), _borderNormalColor, 200);
+            // Note: BorderColour is ColourInfo type, can't use TransformTo with Color4
+            _borderContainer.BorderColour = _borderActiveColor;
+            Scheduler.AddDelayed(() => _borderContainer.BorderColour = _borderNormalColor, 250);
             _label.Text = $"Loading: {Path.GetFileName(filePath)}";
 
             FileDropped?.Invoke(filePath);
