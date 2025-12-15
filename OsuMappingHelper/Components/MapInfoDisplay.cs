@@ -16,7 +16,7 @@ using Image = SixLabors.ImageSharp.Image;
 namespace OsuMappingHelper.Components;
 
 /// <summary>
-/// Displays comprehensive map metadata with the beatmap background image and MSD chart.
+/// Displays comprehensive map metadata with the beatmap background image, MSD chart, and pattern analysis.
 /// </summary>
 public partial class MapInfoDisplay : CompositeDrawable
 {
@@ -36,6 +36,10 @@ public partial class MapInfoDisplay : CompositeDrawable
     private MsdChart _msdChart = null!;
     private string? _currentBeatmapPath;
     private CancellationTokenSource? _msdCancellation;
+
+    // Pattern Display
+    private PatternDisplay _patternDisplay = null!;
+    private CancellationTokenSource? _patternCancellation;
 
     private readonly Color4 _accentColor = new Color4(255, 102, 170, 255);
     private readonly Color4 _labelColor = new Color4(160, 160, 160, 255);
@@ -76,7 +80,7 @@ public partial class MapInfoDisplay : CompositeDrawable
                 Colour = new Color4(0, 0, 0, 160),
                 Alpha = 0
             },
-            // Content - Two rows: info on top, MSD chart on bottom
+            // Content - Two rows: info on top, MSD chart + patterns on bottom
             new Container
             {
                 RelativeSizeAxes = Axes.Both,
@@ -87,7 +91,7 @@ public partial class MapInfoDisplay : CompositeDrawable
                     RowDimensions = new[]
                     {
                         new Dimension(GridSizeMode.Absolute, 95),  // Top row (map info)
-                        new Dimension()                             // Bottom row (MSD chart, fills remaining)
+                        new Dimension()                             // Bottom row (MSD chart + patterns, fills remaining)
                     },
                     Content = new[]
                     {
@@ -188,16 +192,42 @@ public partial class MapInfoDisplay : CompositeDrawable
                                 }
                             }
                         },
-                        // Bottom row - MSD Chart
+                        // Bottom row - MSD Chart (left) + Pattern Display (right)
                         new Drawable[]
                         {
                             new Container
                             {
                                 RelativeSizeAxes = Axes.Both,
                                 Padding = new MarginPadding { Top = 8 },
-                                Child = _msdChart = new MsdChart
+                                Child = new GridContainer
                                 {
-                                    RelativeSizeAxes = Axes.Both
+                                    RelativeSizeAxes = Axes.Both,
+                                    ColumnDimensions = new[]
+                                    {
+                                        new Dimension(GridSizeMode.Relative, 0.6f),  // MSD Chart
+                                        new Dimension(GridSizeMode.Relative, 0.4f)   // Pattern Display
+                                    },
+                                    Content = new[]
+                                    {
+                                        new Drawable[]
+                                        {
+                                            // MSD Chart
+                                            _msdChart = new MsdChart
+                                            {
+                                                RelativeSizeAxes = Axes.Both
+                                            },
+                                            // Pattern Display
+                                            new Container
+                                            {
+                                                RelativeSizeAxes = Axes.Both,
+                                                Padding = new MarginPadding { Left = 8 },
+                                                Child = _patternDisplay = new PatternDisplay
+                                                {
+                                                    RelativeSizeAxes = Axes.Both
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -280,6 +310,9 @@ public partial class MapInfoDisplay : CompositeDrawable
 
         // Load MSD analysis for mania maps
         LoadMsdAnalysis(osuFile);
+
+        // Load pattern analysis for mania maps
+        LoadPatternAnalysis(osuFile);
     }
 
     public void SetNoMap()
@@ -294,6 +327,7 @@ public partial class MapInfoDisplay : CompositeDrawable
         
         ClearBackground();
         ClearMsdAnalysis();
+        ClearPatternAnalysis();
     }
 
     private void LoadMsdAnalysis(OsuFile osuFile)
@@ -338,7 +372,15 @@ public partial class MapInfoDisplay : CompositeDrawable
                 Schedule(() =>
                 {
                     if (!token.IsCancellationRequested)
+                    {
                         _msdChart.SetSingleRateResult(result);
+                        
+                        // Pass full MSD scores to pattern display for sorting and classification
+                        if (result?.Scores != null)
+                        {
+                            _patternDisplay.SetMsdScores(result.Scores);
+                        }
+                    }
                 });
             }
             catch (Exception ex)
@@ -362,6 +404,61 @@ public partial class MapInfoDisplay : CompositeDrawable
         _msdCancellation?.Cancel();
         _currentBeatmapPath = null;
         _msdChart.Clear();
+    }
+
+    private void LoadPatternAnalysis(OsuFile osuFile)
+    {
+        // Cancel any pending pattern analysis
+        _patternCancellation?.Cancel();
+        _patternCancellation = new CancellationTokenSource();
+        var token = _patternCancellation.Token;
+
+        // Only analyze 4K mania maps
+        if (osuFile.Mode != 3 || Math.Abs(osuFile.CircleSize - 4.0) > 0.1)
+        {
+            _patternDisplay.ShowError("4K mania only");
+            return;
+        }
+
+        _patternDisplay.ShowLoading();
+
+        // Run analysis in background
+        Task.Run(() =>
+        {
+            try
+            {
+                var patternFinder = new PatternFinder(osuFile);
+                var result = patternFinder.FindAllPatterns(osuFile);
+
+                if (token.IsCancellationRequested)
+                    return;
+
+                Schedule(() =>
+                {
+                    if (!token.IsCancellationRequested)
+                        _patternDisplay.SetPatternResult(result);
+                });
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[Pattern] Analysis failed: {ex.Message}");
+                
+                if (token.IsCancellationRequested)
+                    return;
+
+                Schedule(() =>
+                {
+                    if (!token.IsCancellationRequested)
+                        _patternDisplay.ShowError($"Error: {ex.Message.Split('\n')[0]}");
+                });
+            }
+        }, token);
+    }
+
+    private void ClearPatternAnalysis()
+    {
+        _patternCancellation?.Cancel();
+        _patternDisplay.Clear();
     }
 
     private void LoadBackground(string? backgroundPath)

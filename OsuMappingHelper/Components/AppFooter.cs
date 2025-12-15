@@ -50,7 +50,7 @@ public partial class AppFooter : CompositeDrawable
                     // Copyright / credit link (center)
                     new LinkText(
                         "Companella! -Leyna",
-                        "https://github.com/leinadix",
+                        "https://github.com/Leinadix/companella",
                         fontSize: 11f,
                         normalColor: new Color4(160, 160, 160, 255),
                         hoverColor: _accentColor)
@@ -88,7 +88,7 @@ public partial class AppFooter : CompositeDrawable
                     Padding = new MarginPadding { Left = 8, Right = 8, Top = 3, Bottom = 3 },
                     Child = new LinkText(
                         "Support on Ko-fi",
-                        "https://ko-fi.com",
+                        "https://ko-fi.com/leynadev",
                         fontSize: 10f,
                         fontWeight: "Bold",
                         normalColor: Color4.White,

@@ -13,6 +13,7 @@ $ProjectRoot = $PSScriptRoot
 $CSharpProject = Join-Path $ProjectRoot "OsuMappingHelper\OsuMappingHelper.csproj"
 $RustProject = Join-Path $ProjectRoot "msd-calculator"
 $BpmScript = Join-Path $ProjectRoot "bpm.py"
+$DansConfig = Join-Path $ProjectRoot "dans.json"
 
 Write-Host "=== OsuMappingHelper Build Script ===" -ForegroundColor Cyan
 Write-Host "Configuration: $Configuration"
@@ -65,6 +66,10 @@ if (-not (Test-Path $ToolsDir)) {
 Write-Host "  Copying bpm.py..."
 Copy-Item $BpmScript -Destination $ToolsDir -Force
 
+# Copy dans.json (to output directory, next to exe)
+Write-Host "  Copying dans.json..."
+Copy-Item $DansConfig -Destination $OutputDir -Force
+
 # Copy msd-calculator.exe
 $MsdCalcExe = if ($Configuration -eq "Release") {
     Join-Path $RustProject "target\release\msd-calculator.exe"
@@ -84,6 +89,7 @@ Write-Host "`n=== Build Complete ===" -ForegroundColor Green
 Write-Host "Output directory: $OutputDir"
 Write-Host "Tools directory: $ToolsDir"
 
-# List copied tools
-Write-Host "`nCopied tools:"
-Get-ChildItem $ToolsDir | ForEach-Object { Write-Host "  - $($_.Name)" }
+# List copied files
+Write-Host "`nCopied files:"
+Write-Host "  - dans.json (config)"
+Get-ChildItem $ToolsDir | ForEach-Object { Write-Host "  - tools/$($_.Name)" }

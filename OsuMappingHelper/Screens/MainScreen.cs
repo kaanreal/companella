@@ -11,7 +11,7 @@ using OsuMappingHelper.Services;
 namespace OsuMappingHelper.Screens;
 
 /// <summary>
-/// Main screen of the osu! Mapping Helper application.
+/// Main screen of the Companella! application.
 /// </summary>
 public partial class MainScreen : osu.Framework.Screens.Screen
 {
@@ -40,6 +40,9 @@ public partial class MainScreen : osu.Framework.Screens.Screen
     private DropZone _dropZone = null!;
     private AppFooter _appFooter = null!;
     private LoadingOverlay _loadingOverlay = null!;
+    
+    // Window decoration
+    private CustomTitleBar _titleBar = null!;
 
     private OsuFile? _currentOsuFile;
     private string? _lastDetectedBeatmap;
@@ -58,6 +61,12 @@ public partial class MainScreen : osu.Framework.Screens.Screen
 
         InternalChildren = new Drawable[]
         {
+            // Custom osu!-styled title bar (on top)
+            _titleBar = new CustomTitleBar
+            {
+                Anchor = Anchor.TopLeft,
+                Origin = Anchor.TopLeft
+            },
             // Dark background
             new Box
             {
@@ -68,7 +77,7 @@ public partial class MainScreen : osu.Framework.Screens.Screen
             new GridContainer
             {
                 RelativeSizeAxes = Axes.Both,
-                Padding = new MarginPadding { Left = 15, Right = 15, Top = 15, Bottom = 43 }, // Bottom padding for footer
+                Padding = new MarginPadding { Left = 15, Right = 15, Top = 47, Bottom = 43 }, // Top padding for title bar, bottom padding for footer
                 RowDimensions = new[]
                 {
                     new Dimension(GridSizeMode.Absolute, 300),  // Map info header (2.5x bigger)
