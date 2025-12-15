@@ -27,6 +27,9 @@ public partial class MainScreen : osu.Framework.Screens.Screen
     [Resolved]
     private UserSettingsService UserSettingsService { get; set; } = null!;
 
+    [Resolved]
+    private AutoUpdaterService AutoUpdaterService { get; set; } = null!;
+
     // Header components
     private MapInfoDisplay _mapInfoDisplay = null!;
     
@@ -46,6 +49,9 @@ public partial class MainScreen : osu.Framework.Screens.Screen
     private DropZone _dropZone = null!;
     private AppFooter _appFooter = null!;
     private LoadingOverlay _loadingOverlay = null!;
+    
+    // Update dialog
+    private UpdateDialog _updateDialog = null!;
     
     // Window decoration
     private CustomTitleBar _titleBar = null!;
@@ -143,7 +149,9 @@ public partial class MainScreen : osu.Framework.Screens.Screen
                 Alpha = 1f // Visible by default, will be hidden in overlay mode
             },
             // Loading overlay (on top of everything)
-            _loadingOverlay = new LoadingOverlay()
+            _loadingOverlay = new LoadingOverlay(),
+            // Update dialog (topmost)
+            _updateDialog = new UpdateDialog()
         };
 
         // Wire up events
@@ -167,6 +175,32 @@ public partial class MainScreen : osu.Framework.Screens.Screen
 
         // Try to attach to osu! process
         TryAttachToOsu();
+
+        // Check for updates in background
+        CheckForUpdatesAsync();
+    }
+
+    private async void CheckForUpdatesAsync()
+    {
+        try
+        {
+            // Small delay to let the UI settle
+            await Task.Delay(2000);
+
+            var updateInfo = await AutoUpdaterService.CheckForUpdatesAsync();
+            
+            if (updateInfo != null)
+            {
+                Schedule(() =>
+                {
+                    _updateDialog.Show(updateInfo, AutoUpdaterService);
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[MainScreen] Update check failed: {ex.Message}");
+        }
     }
 
     private Container CreateGameplayTab()

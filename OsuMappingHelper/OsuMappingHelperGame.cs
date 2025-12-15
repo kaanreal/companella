@@ -43,6 +43,7 @@ public partial class OsuMappingHelperGame : Game
     private UserSettingsService _userSettingsService = null!;
     private OsuWindowOverlayService _overlayService = null!;
     private GlobalHotkeyService _hotkeyService = null!;
+    private AutoUpdaterService _autoUpdaterService = null!;
     
     // Overlay state
     private bool _isWindowVisible = true;
@@ -73,6 +74,7 @@ public partial class OsuMappingHelperGame : Game
         _userSettingsService = new UserSettingsService();
         _overlayService = new OsuWindowOverlayService();
         _hotkeyService = new GlobalHotkeyService();
+        _autoUpdaterService = new AutoUpdaterService();
 
         _dependencies.CacheAs(_processDetector);
         _dependencies.CacheAs(_fileParser);
@@ -84,6 +86,7 @@ public partial class OsuMappingHelperGame : Game
         _dependencies.CacheAs(_userSettingsService);
         _dependencies.CacheAs(_overlayService);
         _dependencies.CacheAs(_hotkeyService);
+        _dependencies.CacheAs(_autoUpdaterService);
 
         return _dependencies;
     }
@@ -715,6 +718,7 @@ public partial class OsuMappingHelperGame : Game
         _processDetector?.Dispose();
         _overlayService?.Dispose();
         _hotkeyService?.Dispose();
+        _autoUpdaterService?.Dispose();
         base.Dispose(isDisposing);
     }
 }
