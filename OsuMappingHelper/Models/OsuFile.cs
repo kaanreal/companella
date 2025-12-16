@@ -7,6 +7,7 @@ namespace OsuMappingHelper.Models;
 /// </summary>
 public class OsuFile
 {
+
     /// <summary>
     /// Full path to the .osu file.
     /// </summary>
