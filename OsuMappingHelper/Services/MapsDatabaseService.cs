@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using Microsoft.Data.Sqlite;
 using OsuMappingHelper.Models;
@@ -14,11 +15,18 @@ public class MapsDatabaseService : IDisposable
     private readonly string _connectionString;
     private readonly MsdAnalyzer? _msdAnalyzer;
     private readonly OsuFileParser _fileParser;
-    private readonly object _dbWriteLock = new(); // Lock for thread-safe database writes
     private bool _isDisposed;
 
     private CancellationTokenSource? _indexingCts;
     private bool _isIndexing;
+
+    // Cache for existing map metadata to avoid per-file database queries
+    private ConcurrentDictionary<string, CachedMapInfo>? _mapInfoCache;
+
+    // Batch write queue for efficient database inserts
+    private readonly ConcurrentQueue<IndexedMap> _pendingWrites = new();
+    private readonly object _batchWriteLock = new();
+    private const int BatchWriteSize = 50;
 
     /// <summary>
     /// Event raised when indexing progress changes.
@@ -66,6 +74,8 @@ public class MapsDatabaseService : IDisposable
                 CREATE TABLE IF NOT EXISTS Maps (
                     BeatmapPath TEXT PRIMARY KEY,
                     FileHash TEXT NOT NULL,
+                    FileSize INTEGER DEFAULT 0,
+                    LastModified INTEGER DEFAULT 0,
                     Title TEXT,
                     Artist TEXT,
                     Version TEXT,
@@ -76,6 +86,10 @@ public class MapsDatabaseService : IDisposable
                     OverallMsd REAL,
                     LastAnalyzed TEXT NOT NULL
                 )";
+
+            // Migration: add FileSize and LastModified columns if they don't exist
+            var addFileSizeColumn = "ALTER TABLE Maps ADD COLUMN FileSize INTEGER DEFAULT 0";
+            var addLastModifiedColumn = "ALTER TABLE Maps ADD COLUMN LastModified INTEGER DEFAULT 0";
 
             var createMsdScoresTable = @"
                 CREATE TABLE IF NOT EXISTS MapMsdScores (
@@ -112,6 +126,21 @@ public class MapsDatabaseService : IDisposable
 
             using (var cmd = new SqliteCommand(createPlayerStatsTable, connection))
                 cmd.ExecuteNonQuery();
+
+            // Run migrations for new columns (ignore errors if columns already exist)
+            try
+            {
+                using var cmd = new SqliteCommand(addFileSizeColumn, connection);
+                cmd.ExecuteNonQuery();
+            }
+            catch { /* Column already exists */ }
+
+            try
+            {
+                using var cmd = new SqliteCommand(addLastModifiedColumn, connection);
+                cmd.ExecuteNonQuery();
+            }
+            catch { /* Column already exists */ }
 
             // Create indexes for faster queries
             var indexes = new[]
@@ -265,68 +294,19 @@ public class MapsDatabaseService : IDisposable
     }
 
     /// <summary>
-    /// Saves or updates a map in the database (thread-safe).
+    /// Saves or updates a map in the database (thread-safe, for single map operations outside of batch indexing).
     /// </summary>
     private void SaveMap(IndexedMap map)
     {
-        lock (_dbWriteLock)
+        lock (_batchWriteLock)
         {
             using var connection = new SqliteConnection(_connectionString);
             connection.Open();
-
             using var transaction = connection.BeginTransaction();
 
             try
             {
-                // Delete existing data
-                using (var cmd = new SqliteCommand("DELETE FROM MapMsdScores WHERE BeatmapPath = @Path", connection, transaction))
-                {
-                    cmd.Parameters.AddWithValue("@Path", map.BeatmapPath);
-                    cmd.ExecuteNonQuery();
-                }
-
-                // Insert or replace map
-                var insertMap = @"
-                    INSERT OR REPLACE INTO Maps (BeatmapPath, FileHash, Title, Artist, Version, Creator, CircleSize, Mode, DominantSkillset, OverallMsd, LastAnalyzed)
-                    VALUES (@Path, @Hash, @Title, @Artist, @Version, @Creator, @CircleSize, @Mode, @Skillset, @Msd, @Analyzed)";
-
-                using (var cmd = new SqliteCommand(insertMap, connection, transaction))
-                {
-                    cmd.Parameters.AddWithValue("@Path", map.BeatmapPath);
-                    cmd.Parameters.AddWithValue("@Hash", map.FileHash);
-                    cmd.Parameters.AddWithValue("@Title", map.Title ?? "");
-                    cmd.Parameters.AddWithValue("@Artist", map.Artist ?? "");
-                    cmd.Parameters.AddWithValue("@Version", map.Version ?? "");
-                    cmd.Parameters.AddWithValue("@Creator", map.Creator ?? "");
-                    cmd.Parameters.AddWithValue("@CircleSize", map.CircleSize);
-                    cmd.Parameters.AddWithValue("@Mode", map.Mode);
-                    cmd.Parameters.AddWithValue("@Skillset", map.DominantSkillset ?? "");
-                    cmd.Parameters.AddWithValue("@Msd", map.OverallMsd);
-                    cmd.Parameters.AddWithValue("@Analyzed", map.LastAnalyzed.ToString("o"));
-                    cmd.ExecuteNonQuery();
-                }
-
-                // Insert MSD scores
-                var insertScore = @"
-                    INSERT INTO MapMsdScores (BeatmapPath, Rate, Overall, Stream, Jumpstream, Handstream, Stamina, Jackspeed, Chordjack, Technical)
-                    VALUES (@Path, @Rate, @Overall, @Stream, @Jumpstream, @Handstream, @Stamina, @Jackspeed, @Chordjack, @Technical)";
-
-                foreach (var score in map.MsdScores)
-                {
-                    using var cmd = new SqliteCommand(insertScore, connection, transaction);
-                    cmd.Parameters.AddWithValue("@Path", map.BeatmapPath);
-                    cmd.Parameters.AddWithValue("@Rate", score.Rate);
-                    cmd.Parameters.AddWithValue("@Overall", score.Overall);
-                    cmd.Parameters.AddWithValue("@Stream", score.Stream);
-                    cmd.Parameters.AddWithValue("@Jumpstream", score.Jumpstream);
-                    cmd.Parameters.AddWithValue("@Handstream", score.Handstream);
-                    cmd.Parameters.AddWithValue("@Stamina", score.Stamina);
-                    cmd.Parameters.AddWithValue("@Jackspeed", score.Jackspeed);
-                    cmd.Parameters.AddWithValue("@Chordjack", score.Chordjack);
-                    cmd.Parameters.AddWithValue("@Technical", score.Technical);
-                    cmd.ExecuteNonQuery();
-                }
-
+                SaveMapInternal(map, connection, transaction);
                 transaction.Commit();
             }
             catch
@@ -335,6 +315,16 @@ public class MapsDatabaseService : IDisposable
                 throw;
             }
         }
+    }
+
+    /// <summary>
+    /// Cached map info for fast unchanged file detection.
+    /// </summary>
+    private struct CachedMapInfo
+    {
+        public string FileHash;
+        public long FileSize;
+        public long LastModified;
     }
 
     /// <summary>
@@ -348,7 +338,7 @@ public class MapsDatabaseService : IDisposable
             connection.Open();
 
             var query = @"
-                SELECT BeatmapPath, FileHash, Title, Artist, Version, Creator, CircleSize, Mode, DominantSkillset, OverallMsd, LastAnalyzed
+                SELECT BeatmapPath, FileHash, Title, Artist, Version, Creator, CircleSize, Mode, DominantSkillset, OverallMsd, LastAnalyzed, FileSize, LastModified
                 FROM Maps WHERE BeatmapPath = @Path";
 
             using var cmd = new SqliteCommand(query, connection);
@@ -440,7 +430,7 @@ public class MapsDatabaseService : IDisposable
             var offset = criteria.Offset.HasValue ? $"OFFSET {criteria.Offset.Value}" : "";
 
             var query = $@"
-                SELECT BeatmapPath, FileHash, Title, Artist, Version, Creator, CircleSize, Mode, DominantSkillset, OverallMsd, LastAnalyzed
+                SELECT BeatmapPath, FileHash, Title, Artist, Version, Creator, CircleSize, Mode, DominantSkillset, OverallMsd, LastAnalyzed, FileSize, LastModified
                 FROM Maps
                 {whereClause}
                 ORDER BY {orderBy} {direction}
@@ -536,19 +526,23 @@ public class MapsDatabaseService : IDisposable
 
         try
         {
-            Console.WriteLine($"[MapsDB] Starting parallel scan of: {songsPath}");
+            Console.WriteLine($"[MapsDB] Starting optimized parallel scan of: {songsPath}");
+
+            // Pre-load existing map info into cache for fast lookups
+            LoadMapInfoCache();
 
             // Find all .osu files
             var osuFiles = Directory.GetFiles(songsPath, "*.osu", SearchOption.AllDirectories);
             var total = osuFiles.Length;
             var processed = 0;
             var indexed = 0;
+            var skipped = 0;
             var failed = 0;
             var progressLock = new object();
 
             // Determine parallelism based on CPU cores (leave some headroom)
             var maxParallelism = Math.Max(1, Environment.ProcessorCount - 1);
-            Console.WriteLine($"[MapsDB] Using {maxParallelism} parallel workers");
+            Console.WriteLine($"[MapsDB] Using {maxParallelism} parallel workers, {_mapInfoCache?.Count ?? 0} cached entries");
 
             IndexingProgressChanged?.Invoke(this, new IndexingProgressEventArgs
             {
@@ -567,15 +561,42 @@ public class MapsDatabaseService : IDisposable
                 CancellationToken = _indexingCts.Token
             };
 
+            // Start background flush task
+            var flushTask = Task.Run(async () =>
+            {
+                try
+                {
+                    while (!_indexingCts.Token.IsCancellationRequested)
+                    {
+                        try
+                        {
+                            await Task.Delay(500, _indexingCts.Token).ConfigureAwait(false);
+                        }
+                        catch (OperationCanceledException)
+                        {
+                            break;
+                        }
+                        if (_pendingWrites.Count >= BatchWriteSize)
+                        {
+                            FlushPendingWrites();
+                        }
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    // Expected when cancellation requested
+                }
+            }, CancellationToken.None); // Don't pass token here, handle inside
+
             await Parallel.ForEachAsync(osuFiles, parallelOptions, async (file, token) =>
             {
                 if (token.IsCancellationRequested)
                     return;
 
-                var success = false;
+                var result = IndexResult.Failed;
                 try
                 {
-                    success = await IndexBeatmapAsync(file, token);
+                    result = await IndexBeatmapOptimizedAsync(file, token);
                 }
                 catch
                 {
@@ -586,11 +607,21 @@ public class MapsDatabaseService : IDisposable
                 lock (progressLock)
                 {
                     processed++;
-                    if (success) indexed++;
-                    else failed++;
+                    switch (result)
+                    {
+                        case IndexResult.Indexed:
+                            indexed++;
+                            break;
+                        case IndexResult.Skipped:
+                            skipped++;
+                            break;
+                        case IndexResult.Failed:
+                            failed++;
+                            break;
+                    }
 
-                    // Report progress every 50 files or at the end
-                    if (processed % 50 == 0 || processed == total)
+                    // Report progress every 100 files or at the end (reduced frequency for speed)
+                    if (processed % 100 == 0 || processed == total)
                     {
                         IndexingProgressChanged?.Invoke(this, new IndexingProgressEventArgs
                         {
@@ -599,11 +630,14 @@ public class MapsDatabaseService : IDisposable
                             IndexedFiles = indexed,
                             FailedFiles = failed,
                             CurrentFile = Path.GetFileName(file),
-                            Status = $"Indexing: {processed}/{total} ({(processed * 100) / total}%)"
+                            Status = $"Indexing: {processed}/{total} ({(processed * 100) / total}%) - {skipped} unchanged"
                         });
                     }
                 }
             });
+
+            // Final flush
+            FlushPendingWrites();
 
             IndexingCompleted?.Invoke(this, new IndexingCompletedEventArgs
             {
@@ -613,7 +647,7 @@ public class MapsDatabaseService : IDisposable
                 WasCancelled = _indexingCts.Token.IsCancellationRequested
             });
 
-            Console.WriteLine($"[MapsDB] Parallel scan complete: {indexed} indexed, {failed} failed");
+            Console.WriteLine($"[MapsDB] Parallel scan complete: {indexed} indexed, {skipped} unchanged, {failed} failed");
         }
         catch (OperationCanceledException)
         {
@@ -628,6 +662,106 @@ public class MapsDatabaseService : IDisposable
             _isIndexing = false;
             _indexingCts?.Dispose();
             _indexingCts = null;
+            _mapInfoCache = null; // Clear cache after indexing
+        }
+    }
+
+    private enum IndexResult
+    {
+        Indexed,
+        Skipped,
+        Failed
+    }
+
+    /// <summary>
+    /// Optimized indexing that uses cache and batch writes.
+    /// </summary>
+    private async Task<IndexResult> IndexBeatmapOptimizedAsync(string beatmapPath, CancellationToken cancellationToken)
+    {
+        if (!File.Exists(beatmapPath))
+            return IndexResult.Failed;
+
+        try
+        {
+            // Quick check using cache - avoids reading file if unchanged
+            if (!NeedsReindexing(beatmapPath, out var fileHash))
+            {
+                return IndexResult.Skipped;
+            }
+
+            // Get file metadata for caching
+            var fileInfo = new FileInfo(beatmapPath);
+
+            // Parse the .osu file
+            var osuFile = _fileParser.Parse(beatmapPath);
+
+            // Only index 4K mania maps for MSD analysis
+            var is4KMania = osuFile.Mode == 3 && Math.Abs(osuFile.CircleSize - 4.0) < 0.1;
+
+            var map = new IndexedMap
+            {
+                BeatmapPath = beatmapPath,
+                FileHash = fileHash,
+                FileSize = fileInfo.Length,
+                LastModifiedTicks = fileInfo.LastWriteTimeUtc.Ticks,
+                Title = osuFile.Title,
+                Artist = osuFile.Artist,
+                Version = osuFile.Version,
+                Creator = osuFile.Creator,
+                CircleSize = osuFile.CircleSize,
+                Mode = osuFile.Mode,
+                LastAnalyzed = DateTime.UtcNow
+            };
+
+            // Analyze MSD for 4K mania maps
+            if (is4KMania && _msdAnalyzer != null)
+            {
+                try
+                {
+                    var msdResult = await _msdAnalyzer.AnalyzeAsync(beatmapPath, new MsdAnalysisOptions { TimeoutMs = 30000 });
+
+                    map.DominantSkillset = msdResult.DominantSkillset;
+                    map.OverallMsd = msdResult.Difficulty1x;
+
+                    // Store scores for all rates
+                    foreach (var rate in msdResult.Rates)
+                    {
+                        map.MsdScores.Add(new MapMsdScore
+                        {
+                            Rate = rate.Rate,
+                            Overall = rate.Scores.Overall,
+                            Stream = rate.Scores.Stream,
+                            Jumpstream = rate.Scores.Jumpstream,
+                            Handstream = rate.Scores.Handstream,
+                            Stamina = rate.Scores.Stamina,
+                            Jackspeed = rate.Scores.Jackspeed,
+                            Chordjack = rate.Scores.Chordjack,
+                            Technical = rate.Scores.Technical
+                        });
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[MapsDB] MSD analysis failed for {Path.GetFileName(beatmapPath)}: {ex.Message}");
+                    // Store map without MSD data
+                }
+            }
+
+            // Queue for batch write instead of immediate write
+            _pendingWrites.Enqueue(map);
+
+            // Trigger batch flush if queue is large enough
+            if (_pendingWrites.Count >= BatchWriteSize)
+            {
+                FlushPendingWrites();
+            }
+
+            return IndexResult.Indexed;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[MapsDB] Error indexing {beatmapPath}: {ex.Message}");
+            return IndexResult.Failed;
         }
     }
 
@@ -650,6 +784,195 @@ public class MapsDatabaseService : IDisposable
         return Convert.ToHexString(hash);
     }
 
+    /// <summary>
+    /// Loads all existing map info into memory cache for fast lookups.
+    /// </summary>
+    private void LoadMapInfoCache()
+    {
+        _mapInfoCache = new ConcurrentDictionary<string, CachedMapInfo>(StringComparer.OrdinalIgnoreCase);
+
+        try
+        {
+            using var connection = new SqliteConnection(_connectionString);
+            connection.Open();
+
+            using var cmd = new SqliteCommand("SELECT BeatmapPath, FileHash, FileSize, LastModified FROM Maps", connection);
+            using var reader = cmd.ExecuteReader();
+
+            while (reader.Read())
+            {
+                var path = reader.GetString(0);
+                var info = new CachedMapInfo
+                {
+                    FileHash = reader.GetString(1),
+                    FileSize = reader.IsDBNull(2) ? 0 : reader.GetInt64(2),
+                    LastModified = reader.IsDBNull(3) ? 0 : reader.GetInt64(3)
+                };
+                _mapInfoCache[path] = info;
+            }
+
+            Console.WriteLine($"[MapsDB] Loaded {_mapInfoCache.Count} cached map entries");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[MapsDB] Error loading map cache: {ex.Message}");
+            _mapInfoCache = new ConcurrentDictionary<string, CachedMapInfo>(StringComparer.OrdinalIgnoreCase);
+        }
+    }
+
+    /// <summary>
+    /// Checks if a file needs reindexing using cached metadata and file system info.
+    /// </summary>
+    private bool NeedsReindexing(string filePath, out string fileHash)
+    {
+        fileHash = "";
+
+        if (_mapInfoCache == null)
+            return true;
+
+        // Get file info for quick check
+        var fileInfo = new FileInfo(filePath);
+        if (!fileInfo.Exists)
+            return false;
+
+        var fileSize = fileInfo.Length;
+        var lastModified = fileInfo.LastWriteTimeUtc.Ticks;
+
+        // Check if we have cached info for this file
+        if (_mapInfoCache.TryGetValue(filePath, out var cached))
+        {
+            // If file size and modification time match, skip without computing hash
+            if (cached.FileSize == fileSize && cached.LastModified == lastModified)
+            {
+                return false; // File unchanged, no need to reindex
+            }
+        }
+
+        // File is new or changed, compute hash
+        fileHash = ComputeFileHash(filePath);
+
+        // Double-check with hash in case only timestamps changed but content is same
+        if (_mapInfoCache.TryGetValue(filePath, out cached) && cached.FileHash == fileHash)
+        {
+            // Content unchanged, just update the cached metadata
+            _mapInfoCache[filePath] = new CachedMapInfo
+            {
+                FileHash = fileHash,
+                FileSize = fileSize,
+                LastModified = lastModified
+            };
+            return false;
+        }
+
+        return true; // Needs indexing
+    }
+
+    /// <summary>
+    /// Flushes pending writes to the database in a batch.
+    /// </summary>
+    private void FlushPendingWrites()
+    {
+        var maps = new List<IndexedMap>();
+
+        while (_pendingWrites.TryDequeue(out var map))
+        {
+            maps.Add(map);
+        }
+
+        if (maps.Count == 0)
+            return;
+
+        lock (_batchWriteLock)
+        {
+            try
+            {
+                using var connection = new SqliteConnection(_connectionString);
+                connection.Open();
+                using var transaction = connection.BeginTransaction();
+
+                foreach (var map in maps)
+                {
+                    SaveMapInternal(map, connection, transaction);
+                }
+
+                transaction.Commit();
+                Console.WriteLine($"[MapsDB] Batch wrote {maps.Count} maps");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[MapsDB] Batch write error: {ex.Message}");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Internal save method that uses an existing connection and transaction.
+    /// </summary>
+    private void SaveMapInternal(IndexedMap map, SqliteConnection connection, SqliteTransaction transaction)
+    {
+        // Delete existing MSD scores
+        using (var cmd = new SqliteCommand("DELETE FROM MapMsdScores WHERE BeatmapPath = @Path", connection, transaction))
+        {
+            cmd.Parameters.AddWithValue("@Path", map.BeatmapPath);
+            cmd.ExecuteNonQuery();
+        }
+
+        // Insert or replace map
+        var insertMap = @"
+            INSERT OR REPLACE INTO Maps (BeatmapPath, FileHash, FileSize, LastModified, Title, Artist, Version, Creator, CircleSize, Mode, DominantSkillset, OverallMsd, LastAnalyzed)
+            VALUES (@Path, @Hash, @FileSize, @LastModified, @Title, @Artist, @Version, @Creator, @CircleSize, @Mode, @Skillset, @Msd, @Analyzed)";
+
+        using (var cmd = new SqliteCommand(insertMap, connection, transaction))
+        {
+            cmd.Parameters.AddWithValue("@Path", map.BeatmapPath);
+            cmd.Parameters.AddWithValue("@Hash", map.FileHash);
+            cmd.Parameters.AddWithValue("@FileSize", map.FileSize);
+            cmd.Parameters.AddWithValue("@LastModified", map.LastModifiedTicks);
+            cmd.Parameters.AddWithValue("@Title", map.Title ?? "");
+            cmd.Parameters.AddWithValue("@Artist", map.Artist ?? "");
+            cmd.Parameters.AddWithValue("@Version", map.Version ?? "");
+            cmd.Parameters.AddWithValue("@Creator", map.Creator ?? "");
+            cmd.Parameters.AddWithValue("@CircleSize", map.CircleSize);
+            cmd.Parameters.AddWithValue("@Mode", map.Mode);
+            cmd.Parameters.AddWithValue("@Skillset", map.DominantSkillset ?? "");
+            cmd.Parameters.AddWithValue("@Msd", map.OverallMsd);
+            cmd.Parameters.AddWithValue("@Analyzed", map.LastAnalyzed.ToString("o"));
+            cmd.ExecuteNonQuery();
+        }
+
+        // Insert MSD scores
+        if (map.MsdScores.Count > 0)
+        {
+            var insertScore = @"
+                INSERT INTO MapMsdScores (BeatmapPath, Rate, Overall, Stream, Jumpstream, Handstream, Stamina, Jackspeed, Chordjack, Technical)
+                VALUES (@Path, @Rate, @Overall, @Stream, @Jumpstream, @Handstream, @Stamina, @Jackspeed, @Chordjack, @Technical)";
+
+            foreach (var score in map.MsdScores)
+            {
+                using var cmd = new SqliteCommand(insertScore, connection, transaction);
+                cmd.Parameters.AddWithValue("@Path", map.BeatmapPath);
+                cmd.Parameters.AddWithValue("@Rate", score.Rate);
+                cmd.Parameters.AddWithValue("@Overall", score.Overall);
+                cmd.Parameters.AddWithValue("@Stream", score.Stream);
+                cmd.Parameters.AddWithValue("@Jumpstream", score.Jumpstream);
+                cmd.Parameters.AddWithValue("@Handstream", score.Handstream);
+                cmd.Parameters.AddWithValue("@Stamina", score.Stamina);
+                cmd.Parameters.AddWithValue("@Jackspeed", score.Jackspeed);
+                cmd.Parameters.AddWithValue("@Chordjack", score.Chordjack);
+                cmd.Parameters.AddWithValue("@Technical", score.Technical);
+                cmd.ExecuteNonQuery();
+            }
+        }
+
+        // Update cache
+        _mapInfoCache?.TryAdd(map.BeatmapPath, new CachedMapInfo
+        {
+            FileHash = map.FileHash,
+            FileSize = map.FileSize,
+            LastModified = map.LastModifiedTicks
+        });
+    }
+
     private IndexedMap ReadMap(SqliteDataReader reader)
     {
         return new IndexedMap
@@ -664,7 +987,9 @@ public class MapsDatabaseService : IDisposable
             Mode = reader.IsDBNull(7) ? 3 : reader.GetInt32(7),
             DominantSkillset = reader.IsDBNull(8) ? "" : reader.GetString(8),
             OverallMsd = reader.IsDBNull(9) ? 0 : (float)reader.GetDouble(9),
-            LastAnalyzed = DateTime.Parse(reader.GetString(10))
+            LastAnalyzed = DateTime.Parse(reader.GetString(10)),
+            FileSize = reader.FieldCount > 11 && !reader.IsDBNull(11) ? reader.GetInt64(11) : 0,
+            LastModifiedTicks = reader.FieldCount > 12 && !reader.IsDBNull(12) ? reader.GetInt64(12) : 0
         };
     }
 

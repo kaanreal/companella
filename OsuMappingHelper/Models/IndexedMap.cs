@@ -16,6 +16,16 @@ public class IndexedMap
     public string FileHash { get; set; } = string.Empty;
 
     /// <summary>
+    /// File size in bytes for quick change detection.
+    /// </summary>
+    public long FileSize { get; set; }
+
+    /// <summary>
+    /// Last modification time in ticks for quick change detection.
+    /// </summary>
+    public long LastModifiedTicks { get; set; }
+
+    /// <summary>
     /// Song title.
     /// </summary>
     public string Title { get; set; } = string.Empty;
