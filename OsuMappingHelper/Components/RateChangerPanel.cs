@@ -5,6 +5,7 @@ using osu.Framework.Graphics.Containers;
 using osu.Framework.Graphics.Shapes;
 using osu.Framework.Graphics.Sprites;
 using osu.Framework.Graphics.UserInterface;
+using osu.Framework.Input.Events;
 using osuTK;
 using osuTK.Graphics;
 using OsuMappingHelper.Services;
@@ -13,228 +14,235 @@ using TextBox = osu.Framework.Graphics.UserInterface.TextBox;
 namespace OsuMappingHelper.Components;
 
 /// <summary>
-/// Panel for changing beatmap playback rate.
+/// Modern panel for changing beatmap playback rate.
 /// </summary>
 public partial class RateChangerPanel : CompositeDrawable
 {
-    private BasicTextBox _rateTextBox = null!;
-    private BasicTextBox _formatTextBox = null!;
-    private FunctionButton _applyButton = null!;
-    private FunctionButton _previewButton = null!;
+    private StyledTextBox _rateTextBox = null!;
+    private StyledTextBox _formatTextBox = null!;
+    private ModernButton _applyButton = null!;
     private SpriteText _previewText = null!;
+    private FillFlowContainer _quickRateButtons = null!;
 
     public event Action<double, string>? ApplyRateClicked;
-    
-    /// <summary>
-    /// Event fired when the format string changes.
-    /// </summary>
     public event Action<string>? FormatChanged;
+    public event Action<double, string>? PreviewRequested;
 
     private double _currentRate = 1.0;
     private string _currentFormat = RateChanger.DefaultNameFormat;
+
+    private readonly Color4 _accentColor = new Color4(255, 102, 170, 255);
+
+    public RateChangerPanel()
+    {
+        RelativeSizeAxes = Axes.X;
+        AutoSizeAxes = Axes.Y;
+    }
 
     [BackgroundDependencyLoader]
     private void load()
     {
         InternalChildren = new Drawable[]
         {
-            new Container
+            new FillFlowContainer
             {
-                RelativeSizeAxes = Axes.Both,
+                RelativeSizeAxes = Axes.X,
+                AutoSizeAxes = Axes.Y,
+                Direction = FillDirection.Vertical,
+                Spacing = new Vector2(0, 12),
                 Children = new Drawable[]
                 {
-                    new Box
+                    // Rate Selection Section
+                    CreateSection("Rate", new Drawable[]
                     {
-                        RelativeSizeAxes = Axes.Both,
-                        Colour = new Color4(40, 40, 48, 255)
-                    },
-                    new Container
-                    {
-                        RelativeSizeAxes = Axes.Both,
-                        Padding = new MarginPadding(15),
-                        Child = new FillFlowContainer
+                        // Quick rate buttons
+                        _quickRateButtons = new FillFlowContainer
                         {
                             RelativeSizeAxes = Axes.X,
                             AutoSizeAxes = Axes.Y,
-                            Direction = FillDirection.Vertical,
-                            Spacing = new Vector2(0, 8),
+                            Direction = FillDirection.Horizontal,
+                            Spacing = new Vector2(6, 6),
+                            Children = CreateQuickRateButtons()
+                        },
+                        // Custom rate input
+                        new FillFlowContainer
+                        {
+                            RelativeSizeAxes = Axes.X,
+                            AutoSizeAxes = Axes.Y,
+                            Direction = FillDirection.Horizontal,
+                            Spacing = new Vector2(8, 0),
+                            Margin = new MarginPadding { Top = 8 },
                             Children = new Drawable[]
                             {
                                 new SpriteText
                                 {
-                                    Text = "Rate Changer",
-                                    Font = new FontUsage("", 16, "Bold"),
-                                    Colour = new Color4(255, 102, 170, 255)
+                                    Text = "Custom:",
+                                    Font = new FontUsage("", 13),
+                                    Colour = new Color4(140, 140, 140, 255),
+                                    Anchor = Anchor.CentreLeft,
+                                    Origin = Anchor.CentreLeft
                                 },
-                                // Rate input row
-                                new FillFlowContainer
+                                _rateTextBox = new StyledTextBox
                                 {
-                                    RelativeSizeAxes = Axes.X,
-                                    AutoSizeAxes = Axes.Y,
-                                    Direction = FillDirection.Horizontal,
-                                    Spacing = new Vector2(8, 0),
-                                    Children = new Drawable[]
-                                    {
-                                        new SpriteText
-                                        {
-                                            Text = "Rate:",
-                                            Font = new FontUsage("", 14),
-                                            Colour = new Color4(200, 200, 200, 255),
-                                            Anchor = Anchor.CentreLeft,
-                                            Origin = Anchor.CentreLeft
-                                        },
-                                        CreateRateButton("0.5x", 0.5),
-                                        CreateRateButton("0.75x", 0.75),
-                                        CreateRateButton("0.9x", 0.9),
-                                        new Container
-                                        {
-                                            Width = 70,
-                                            Height = 30,
-                                            Children = new Drawable[]
-                                            {
-                                                new Box
-                                                {
-                                                    RelativeSizeAxes = Axes.Both,
-                                                    Colour = new Color4(25, 25, 30, 255)
-                                                },
-                                                _rateTextBox = new BasicTextBox
-                                                {
-                                                    RelativeSizeAxes = Axes.Both,
-                                                    Text = "1.0",
-                                                    PlaceholderText = "Rate",
-                                                    CommitOnFocusLost = true
-                                                }
-                                            }
-                                        },
-                                        new SpriteText
-                                        {
-                                            Text = "x",
-                                            Font = new FontUsage("", 14),
-                                            Colour = new Color4(150, 150, 150, 255),
-                                            Anchor = Anchor.CentreLeft,
-                                            Origin = Anchor.CentreLeft
-                                        },
-                                        CreateRateButton("1.1x", 1.1),
-                                        CreateRateButton("1.2x", 1.2),
-                                        CreateRateButton("1.3x", 1.3),
-                                        CreateRateButton("1.5x", 1.5)
-                                    }
+                                    Size = new Vector2(80, 32),
+                                    PlaceholderText = "1.0"
                                 },
-                                // Format input row
-                                new FillFlowContainer
-                                {
-                                    RelativeSizeAxes = Axes.X,
-                                    AutoSizeAxes = Axes.Y,
-                                    Direction = FillDirection.Horizontal,
-                                    Spacing = new Vector2(8, 0),
-                                    Children = new Drawable[]
-                                    {
-                                        new SpriteText
-                                        {
-                                            Text = "Format:",
-                                            Font = new FontUsage("", 14),
-                                            Colour = new Color4(200, 200, 200, 255),
-                                            Anchor = Anchor.CentreLeft,
-                                            Origin = Anchor.CentreLeft
-                                        },
-                                        new Container
-                                        {
-                                            Width = 300,
-                                            Height = 30,
-                                            Children = new Drawable[]
-                                            {
-                                                new Box
-                                                {
-                                                    RelativeSizeAxes = Axes.Both,
-                                                    Colour = new Color4(25, 25, 30, 255)
-                                                },
-                                                _formatTextBox = new BasicTextBox
-                                                {
-                                                    RelativeSizeAxes = Axes.Both,
-                                                    Text = RateChanger.DefaultNameFormat,
-                                                    PlaceholderText = "[[name]] [[rate]]",
-                                                    CommitOnFocusLost = true
-                                                }
-                                            }
-                                        },
-                                        _previewButton = new FunctionButton("Preview")
-                                        {
-                                            Width = 70,
-                                            Height = 30
-                                        }
-                                    }
-                                },
-                                // Format help text
                                 new SpriteText
                                 {
-                                    Text = "Tags: [[name]] [[rate]] [[bpm]] [[od]] [[hp]] [[cs]] [[ar]]",
-                                    Font = new FontUsage("", 11),
-                                    Colour = new Color4(120, 120, 120, 255)
-                                },
-                                // Preview row
-                                new FillFlowContainer
-                                {
-                                    RelativeSizeAxes = Axes.X,
-                                    AutoSizeAxes = Axes.Y,
-                                    Direction = FillDirection.Horizontal,
-                                    Spacing = new Vector2(8, 0),
-                                    Children = new Drawable[]
-                                    {
-                                        new SpriteText
-                                        {
-                                            Text = "Preview:",
-                                            Font = new FontUsage("", 12),
-                                            Colour = new Color4(150, 150, 150, 255),
-                                            Anchor = Anchor.CentreLeft,
-                                            Origin = Anchor.CentreLeft
-                                        },
-                                        _previewText = new SpriteText
-                                        {
-                                            Text = "...",
-                                            Font = new FontUsage("", 12),
-                                            Colour = new Color4(100, 200, 255, 255),
-                                            Anchor = Anchor.CentreLeft,
-                                            Origin = Anchor.CentreLeft
-                                        }
-                                    }
-                                },
-                                // Apply button
-                                _applyButton = new FunctionButton("Create Rate-Changed Beatmap")
-                                {
-                                    Width = 250,
-                                    Height = 35,
-                                    Enabled = false
+                                    Text = "x",
+                                    Font = new FontUsage("", 14),
+                                    Colour = new Color4(100, 100, 100, 255),
+                                    Anchor = Anchor.CentreLeft,
+                                    Origin = Anchor.CentreLeft
                                 }
                             }
                         }
+                    }),
+                    // Format Section
+                    CreateSection("Difficulty Name Format", new Drawable[]
+                    {
+                        _formatTextBox = new StyledTextBox
+                        {
+                            RelativeSizeAxes = Axes.X,
+                            Height = 32,
+                            PlaceholderText = "[[name]] [[rate]]"
+                        },
+                        new SpriteText
+                        {
+                            Text = "Available: [[name]] [[rate]] [[bpm]] [[od]] [[hp]] [[msd]]",
+                            Font = new FontUsage("", 11),
+                            Colour = new Color4(90, 90, 90, 255),
+                            Margin = new MarginPadding { Top = 4 }
+                        }
+                    }),
+                    // Preview Section
+                    new Container
+                    {
+                        RelativeSizeAxes = Axes.X,
+                        AutoSizeAxes = Axes.Y,
+                        Children = new Drawable[]
+                        {
+                            new FillFlowContainer
+                            {
+                                RelativeSizeAxes = Axes.X,
+                                AutoSizeAxes = Axes.Y,
+                                Direction = FillDirection.Horizontal,
+                                Spacing = new Vector2(8, 0),
+                                Children = new Drawable[]
+                                {
+                                    new SpriteText
+                                    {
+                                        Text = "Preview:",
+                                        Font = new FontUsage("", 12),
+                                        Colour = new Color4(120, 120, 120, 255),
+                                        Anchor = Anchor.CentreLeft,
+                                        Origin = Anchor.CentreLeft
+                                    },
+                                    _previewText = new SpriteText
+                                    {
+                                        Text = "...",
+                                        Font = new FontUsage("", 12),
+                                        Colour = _accentColor,
+                                        Anchor = Anchor.CentreLeft,
+                                        Origin = Anchor.CentreLeft
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    // Apply Button
+                    _applyButton = new ModernButton("Create Rate-Changed Beatmap")
+                    {
+                        RelativeSizeAxes = Axes.X,
+                        Height = 40,
+                        Enabled = false
                     }
                 }
             }
         };
 
+        // Set initial values
+        _rateTextBox.Text = "1.0";
+        _formatTextBox.Text = _currentFormat;
+
         // Wire up events
         _rateTextBox.OnCommit += OnRateTextCommit;
         _formatTextBox.OnCommit += OnFormatTextCommit;
-        _previewButton.Clicked += UpdatePreview;
         _applyButton.Clicked += OnApplyClicked;
     }
 
-    private FunctionButton CreateRateButton(string label, double rate)
+    private Drawable[] CreateQuickRateButtons()
     {
-        var button = new FunctionButton(label)
+        var rates = new[] { 0.5, 0.6, 0.7, 0.8, 0.9, 1.1, 1.2, 1.3, 1.4 };
+        var buttons = new List<Drawable>();
+
+        foreach (var rate in rates)
         {
-            Width = 45,
-            Height = 30
-        };
-        button.Clicked += () => SetRate(rate);
-        return button;
+            buttons.Add(new QuickRateButton(rate, rate == 1.0, _accentColor)
+            {
+                Size = new Vector2(42, 28),
+                Action = () => SetRate(rate)
+            });
+        }
+
+        return buttons.ToArray();
     }
 
-    private void SetRate(double rate)
+    private Container CreateSection(string title, Drawable[] content)
+    {
+        return new Container
+        {
+            RelativeSizeAxes = Axes.X,
+            AutoSizeAxes = Axes.Y,
+            Children = new Drawable[]
+            {
+                new FillFlowContainer
+                {
+                    RelativeSizeAxes = Axes.X,
+                    AutoSizeAxes = Axes.Y,
+                    Direction = FillDirection.Vertical,
+                    Spacing = new Vector2(0, 6),
+                    Children = new Drawable[]
+                    {
+                        new SpriteText
+                        {
+                            Text = title,
+                            Font = new FontUsage("", 12, "Bold"),
+                            Colour = new Color4(180, 180, 180, 255)
+                        },
+                        new FillFlowContainer
+                        {
+                            RelativeSizeAxes = Axes.X,
+                            AutoSizeAxes = Axes.Y,
+                            Direction = FillDirection.Vertical,
+                            Children = content
+                        }
+                    }
+                }
+            }
+        };
+    }
+
+    /// <summary>
+    /// Sets the rate value programmatically.
+    /// </summary>
+    public void SetRate(double rate)
     {
         _currentRate = rate;
         _rateTextBox.Text = rate.ToString("0.0#", CultureInfo.InvariantCulture);
+        UpdateQuickRateButtonSelection(rate);
         UpdatePreview();
+    }
+
+    private void UpdateQuickRateButtonSelection(double selectedRate)
+    {
+        foreach (var child in _quickRateButtons.Children)
+        {
+            if (child is QuickRateButton button)
+            {
+                button.SetSelected(Math.Abs(button.Rate - selectedRate) < 0.001);
+            }
+        }
     }
 
     private void OnRateTextCommit(TextBox sender, bool newText)
@@ -248,6 +256,7 @@ public partial class RateChangerPanel : CompositeDrawable
         {
             sender.Text = _currentRate.ToString("0.0#", CultureInfo.InvariantCulture);
         }
+        UpdateQuickRateButtonSelection(_currentRate);
         UpdatePreview();
     }
 
@@ -273,14 +282,6 @@ public partial class RateChangerPanel : CompositeDrawable
         ApplyRateClicked?.Invoke(_currentRate, _currentFormat);
     }
 
-    /// <summary>
-    /// Event to request a preview update from the main screen.
-    /// </summary>
-    public event Action<double, string>? PreviewRequested;
-
-    /// <summary>
-    /// Updates the preview text.
-    /// </summary>
     public void SetPreviewText(string text)
     {
         _previewText.Text = text;
@@ -291,9 +292,6 @@ public partial class RateChangerPanel : CompositeDrawable
         _applyButton.Enabled = enabled;
     }
 
-    /// <summary>
-    /// Sets the format string (used to restore saved format).
-    /// </summary>
     public void SetFormat(string format)
     {
         if (string.IsNullOrWhiteSpace(format))
@@ -303,8 +301,202 @@ public partial class RateChangerPanel : CompositeDrawable
         _formatTextBox.Text = format;
     }
 
-    /// <summary>
-    /// Gets the current format string.
-    /// </summary>
     public string CurrentFormat => _currentFormat;
+}
+
+/// <summary>
+/// Quick rate selection button with selection state.
+/// </summary>
+public partial class QuickRateButton : CompositeDrawable
+{
+    public double Rate { get; }
+    public Action? Action { get; set; }
+
+    private bool _isSelected;
+    private Box _background = null!;
+    private Box _hoverOverlay = null!;
+    private SpriteText _label = null!;
+    private readonly Color4 _accentColor;
+
+    private readonly Color4 _normalBg = new Color4(45, 45, 50, 255);
+    private readonly Color4 _selectedBg = new Color4(255, 102, 170, 255);
+    private readonly Color4 _hoverBg = new Color4(60, 60, 65, 255);
+
+    public QuickRateButton(double rate, bool isSelected, Color4 accentColor)
+    {
+        Rate = rate;
+        _isSelected = isSelected;
+        _accentColor = accentColor;
+    }
+
+    [BackgroundDependencyLoader]
+    private void load()
+    {
+        Masking = true;
+        CornerRadius = 4;
+
+        InternalChildren = new Drawable[]
+        {
+            _background = new Box
+            {
+                RelativeSizeAxes = Axes.Both,
+                Colour = _isSelected ? _selectedBg : _normalBg
+            },
+            _hoverOverlay = new Box
+            {
+                RelativeSizeAxes = Axes.Both,
+                Colour = Color4.White,
+                Alpha = 0
+            },
+            _label = new SpriteText
+            {
+                Text = $"{Rate:0.0#}x",
+                Font = new FontUsage("", 12, _isSelected ? "Bold" : ""),
+                Colour = _isSelected ? Color4.White : new Color4(180, 180, 180, 255),
+                Anchor = Anchor.Centre,
+                Origin = Anchor.Centre
+            }
+        };
+    }
+
+    public void SetSelected(bool selected)
+    {
+        _isSelected = selected;
+        _background.FadeColour(_isSelected ? _selectedBg : _normalBg, 150);
+        _label.FadeColour(_isSelected ? Color4.White : new Color4(180, 180, 180, 255), 150);
+        _label.Font = new FontUsage("", 12, _isSelected ? "Bold" : "");
+    }
+
+    protected override bool OnHover(HoverEvent e)
+    {
+        if (!_isSelected)
+        {
+            _hoverOverlay.FadeTo(0.1f, 100);
+            _background.FadeColour(_hoverBg, 100);
+        }
+        return base.OnHover(e);
+    }
+
+    protected override void OnHoverLost(HoverLostEvent e)
+    {
+        _hoverOverlay.FadeTo(0, 100);
+        if (!_isSelected)
+            _background.FadeColour(_normalBg, 100);
+        base.OnHoverLost(e);
+    }
+
+    protected override bool OnClick(ClickEvent e)
+    {
+        Action?.Invoke();
+        return true;
+    }
+}
+
+/// <summary>
+/// Modern styled text box with clean appearance.
+/// </summary>
+public partial class StyledTextBox : BasicTextBox
+{
+    public StyledTextBox()
+    {
+        CornerRadius = 4;
+        BackgroundFocused = new Color4(50, 50, 55, 255);
+        BackgroundUnfocused = new Color4(35, 35, 40, 255);
+        Masking = true;
+    }
+
+    protected override SpriteText CreatePlaceholder() => new SpriteText
+    {
+        Font = new FontUsage("", 13),
+        Colour = new Color4(80, 80, 80, 255)
+    };
+}
+
+/// <summary>
+/// Modern action button with clean styling.
+/// </summary>
+public partial class ModernButton : CompositeDrawable
+{
+    private readonly string _text;
+    private Box _background = null!;
+    private Box _hoverOverlay = null!;
+    private SpriteText _label = null!;
+    private bool _isEnabled = true;
+
+    private readonly Color4 _enabledColor = new Color4(255, 102, 170, 255);
+    private readonly Color4 _disabledColor = new Color4(60, 60, 65, 255);
+
+    public event Action? Clicked;
+
+    public bool Enabled
+    {
+        get => _isEnabled;
+        set
+        {
+            _isEnabled = value;
+            if (_background != null)
+            {
+                _background.FadeColour(_isEnabled ? _enabledColor : _disabledColor, 150);
+                _label.FadeColour(_isEnabled ? Color4.White : new Color4(100, 100, 100, 255), 150);
+            }
+        }
+    }
+
+    public ModernButton(string text)
+    {
+        _text = text;
+    }
+
+    [BackgroundDependencyLoader]
+    private void load()
+    {
+        Masking = true;
+        CornerRadius = 6;
+
+        InternalChildren = new Drawable[]
+        {
+            _background = new Box
+            {
+                RelativeSizeAxes = Axes.Both,
+                Colour = _isEnabled ? _enabledColor : _disabledColor
+            },
+            _hoverOverlay = new Box
+            {
+                RelativeSizeAxes = Axes.Both,
+                Colour = Color4.White,
+                Alpha = 0
+            },
+            _label = new SpriteText
+            {
+                Text = _text,
+                Font = new FontUsage("", 14, "Bold"),
+                Colour = _isEnabled ? Color4.White : new Color4(100, 100, 100, 255),
+                Anchor = Anchor.Centre,
+                Origin = Anchor.Centre
+            }
+        };
+    }
+
+    protected override bool OnHover(HoverEvent e)
+    {
+        if (_isEnabled)
+            _hoverOverlay.FadeTo(0.15f, 100);
+        return base.OnHover(e);
+    }
+
+    protected override void OnHoverLost(HoverLostEvent e)
+    {
+        _hoverOverlay.FadeTo(0, 100);
+        base.OnHoverLost(e);
+    }
+
+    protected override bool OnClick(ClickEvent e)
+    {
+        if (_isEnabled)
+        {
+            Clicked?.Invoke();
+            _hoverOverlay.FadeTo(0.3f, 50).Then().FadeTo(0.15f, 100);
+        }
+        return true;
+    }
 }

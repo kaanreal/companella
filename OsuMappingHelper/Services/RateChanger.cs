@@ -666,4 +666,43 @@ public class RateChanger
             return false;
         }
     }
+
+    /// <summary>
+    /// Calculates the suggested rate to achieve a target MSD from a current MSD.
+    /// Uses a simple approximation: MSD scales roughly linearly with rate.
+    /// </summary>
+    /// <param name="currentMsd">The current MSD at 1.0x rate.</param>
+    /// <param name="targetMsd">The target MSD to achieve.</param>
+    /// <returns>Suggested rate clamped to valid range (0.7 to 2.0), or null if no valid rate.</returns>
+    public static float? GetSuggestedRate(float currentMsd, float targetMsd)
+    {
+        if (currentMsd <= 0 || targetMsd <= 0)
+            return null;
+
+        // MSD scales roughly linearly with rate
+        // A simple approximation: targetMSD / currentMSD ~ suggestedRate
+        var suggestedRate = targetMsd / currentMsd;
+
+        // Clamp to valid rate range
+        if (suggestedRate < 0.7f || suggestedRate > 2.0f)
+            return null;
+
+        // Round to nearest 0.05 for cleaner values
+        suggestedRate = MathF.Round(suggestedRate * 20) / 20;
+
+        return Math.Clamp(suggestedRate, 0.7f, 2.0f);
+    }
+
+    /// <summary>
+    /// Standard rates supported by the MSD calculator.
+    /// </summary>
+    public static readonly float[] StandardRates = { 0.7f, 0.8f, 0.9f, 1.0f, 1.1f, 1.2f, 1.3f, 1.4f, 1.5f, 1.6f, 1.7f, 1.8f, 1.9f, 2.0f };
+
+    /// <summary>
+    /// Gets the nearest standard rate to a calculated rate.
+    /// </summary>
+    public static float GetNearestStandardRate(float rate)
+    {
+        return StandardRates.OrderBy(r => Math.Abs(r - rate)).First();
+    }
 }

@@ -44,6 +44,15 @@ public partial class OsuMappingHelperGame : Game
     private OsuWindowOverlayService _overlayService = null!;
     private GlobalHotkeyService _hotkeyService = null!;
     private AutoUpdaterService _autoUpdaterService = null!;
+    private SessionDatabaseService _sessionDatabaseService = null!;
+    private SessionTrackerService _sessionTrackerService = null!;
+    
+    // Skills analysis services
+    private MapsDatabaseService _mapsDatabaseService = null!;
+    private SkillsTrendAnalyzer _skillsTrendAnalyzer = null!;
+    private MapMmrCalculator _mapMmrCalculator = null!;
+    private MapRecommendationService _mapRecommendationService = null!;
+    private OsuCollectionService _collectionService = null!;
     
     // Overlay state
     private bool _isWindowVisible = true;
@@ -75,6 +84,15 @@ public partial class OsuMappingHelperGame : Game
         _overlayService = new OsuWindowOverlayService();
         _hotkeyService = new GlobalHotkeyService();
         _autoUpdaterService = new AutoUpdaterService();
+        _sessionDatabaseService = new SessionDatabaseService();
+        _sessionTrackerService = new SessionTrackerService(_processDetector, _sessionDatabaseService);
+        
+        // Skills analysis services
+        _mapsDatabaseService = new MapsDatabaseService();
+        _skillsTrendAnalyzer = new SkillsTrendAnalyzer(_sessionDatabaseService);
+        _mapMmrCalculator = new MapMmrCalculator(_mapsDatabaseService);
+        _mapRecommendationService = new MapRecommendationService(_mapsDatabaseService, _mapMmrCalculator, _skillsTrendAnalyzer);
+        _collectionService = new OsuCollectionService(_processDetector);
 
         _dependencies.CacheAs(_processDetector);
         _dependencies.CacheAs(_fileParser);
@@ -87,6 +105,13 @@ public partial class OsuMappingHelperGame : Game
         _dependencies.CacheAs(_overlayService);
         _dependencies.CacheAs(_hotkeyService);
         _dependencies.CacheAs(_autoUpdaterService);
+        _dependencies.CacheAs(_sessionDatabaseService);
+        _dependencies.CacheAs(_sessionTrackerService);
+        _dependencies.CacheAs(_mapsDatabaseService);
+        _dependencies.CacheAs(_skillsTrendAnalyzer);
+        _dependencies.CacheAs(_mapMmrCalculator);
+        _dependencies.CacheAs(_mapRecommendationService);
+        _dependencies.CacheAs(_collectionService);
 
         return _dependencies;
     }
@@ -133,6 +158,13 @@ public partial class OsuMappingHelperGame : Game
                 RestoreWindowSettings();
                 InitializeOverlayAndHotkeys();
                 MakeWindowBorderless();
+                
+                // Auto-start session if enabled in settings
+                if (_userSettingsService.Settings.AutoStartSession && !_sessionTrackerService.IsTracking)
+                {
+                    _sessionTrackerService.StartSession();
+                    Console.WriteLine("[Session] Auto-started session on startup");
+                }
             });
         });
 
@@ -715,10 +747,21 @@ public partial class OsuMappingHelperGame : Game
             // Save settings before closing
             SaveWindowSettings();
         }
+        
+        // Auto-end session on exit if enabled in settings and session is active
+        if (_userSettingsService?.Settings.AutoEndSession == true && _sessionTrackerService?.IsTracking == true)
+        {
+            _sessionTrackerService.StopSession();
+            Console.WriteLine("[Session] Auto-ended session on exit");
+        }
+        
         _processDetector?.Dispose();
         _overlayService?.Dispose();
         _hotkeyService?.Dispose();
         _autoUpdaterService?.Dispose();
+        _sessionTrackerService?.Dispose();
+        _sessionDatabaseService?.Dispose();
+        _mapsDatabaseService?.Dispose();
         base.Dispose(isDisposing);
     }
 }

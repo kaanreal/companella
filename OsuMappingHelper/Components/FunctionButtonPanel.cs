@@ -26,59 +26,54 @@ public partial class FunctionButtonPanel : CompositeDrawable
     /// </summary>
     public BpmFactor SelectedBpmFactor => _bpmFactorToggle?.CurrentFactor ?? BpmFactor.Normal;
 
+    public FunctionButtonPanel()
+    {
+        RelativeSizeAxes = Axes.X;
+        AutoSizeAxes = Axes.Y;
+    }
+
     [BackgroundDependencyLoader]
     private void load()
     {
         InternalChildren = new Drawable[]
         {
-            new Box
+            new FillFlowContainer
             {
-                RelativeSizeAxes = Axes.Both,
-                Colour = new Color4(40, 40, 48, 255)
-            },
-            new Container
-            {
-                RelativeSizeAxes = Axes.Both,
-                Padding = new MarginPadding(10),
-                Child = new FillFlowContainer
+                AutoSizeAxes = Axes.Both,
+                Direction = FillDirection.Vertical,
+                Spacing = new Vector2(0, 8),
+                Children = new Drawable[]
                 {
-                    RelativeSizeAxes = Axes.X,
-                    AutoSizeAxes = Axes.Y,
-                    Direction = FillDirection.Vertical,
-                    Spacing = new Vector2(0, 6),
-                    Children = new Drawable[]
+                    new SpriteText
                     {
-                        new SpriteText
+                        Text = "BPM Analysis",
+                        Font = new FontUsage("", 12, "Bold"),
+                        Colour = new Color4(180, 180, 180, 255)
+                    },
+                    new FillFlowContainer
+                    {
+                        RelativeSizeAxes = Axes.X,
+                        AutoSizeAxes = Axes.Y,
+                        Direction = FillDirection.Horizontal,
+                        Spacing = new Vector2(8, 0),
+                        Children = new Drawable[]
                         {
-                            Text = "Functions",
-                            Font = new FontUsage("", 14, "Bold"),
-                            Colour = new Color4(255, 102, 170, 255)
-                        },
-                        new FillFlowContainer
-                        {
-                            RelativeSizeAxes = Axes.X,
-                            AutoSizeAxes = Axes.Y,
-                            Direction = FillDirection.Horizontal,
-                            Spacing = new Vector2(8, 0),
-                            Children = new Drawable[]
+                            _analyzeBpmButton = new FunctionButton("Analyze BPM")
                             {
-                                _analyzeBpmButton = new FunctionButton("Analyze BPM")
-                                {
-                                    Width = 130,
-                                    Height = 32,
-                                    Enabled = false
-                                },
-                                _bpmFactorToggle = new BpmFactorToggle
-                                {
-                                    Width = 130,
-                                    Height = 32
-                                },
-                                _normalizeSvButton = new FunctionButton("Normalize SV")
-                                {
-                                    Width = 130,
-                                    Height = 32,
-                                    Enabled = false
-                                }
+                                Width = 100,
+                                Height = 32,
+                                Enabled = false
+                            },
+                            _bpmFactorToggle = new BpmFactorToggle
+                            {
+                                Width = 128,
+                                Height = 32
+                            },
+                            _normalizeSvButton = new FunctionButton("Normalize SV")
+                            {
+                                Width = 100,
+                                Height = 32,
+                                Enabled = false
                             }
                         }
                     }

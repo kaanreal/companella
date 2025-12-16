@@ -25,93 +25,88 @@ public partial class OffsetInputPanel : CompositeDrawable
 
     private double _currentOffset = 0;
 
+    public OffsetInputPanel()
+    {
+        RelativeSizeAxes = Axes.X;
+        AutoSizeAxes = Axes.Y;
+    }
+
     [BackgroundDependencyLoader]
     private void load()
     {
         InternalChildren = new Drawable[]
         {
-            new Container
+            new FillFlowContainer
             {
-                RelativeSizeAxes = Axes.Both,
+                AutoSizeAxes = Axes.Both,
+                Direction = FillDirection.Vertical,
+                Spacing = new Vector2(0, 8),
                 Children = new Drawable[]
                 {
-                    new Box
+                    new SpriteText
                     {
-                        RelativeSizeAxes = Axes.Both,
-                        Colour = new Color4(40, 40, 48, 255)
+                        Text = "Universal Offset",
+                        Font = new FontUsage("", 12, "Bold"),
+                        Colour = new Color4(180, 180, 180, 255)
                     },
-                    new Container
+                    new FillFlowContainer
                     {
-                        RelativeSizeAxes = Axes.Both,
-                        Padding = new MarginPadding(15),
-                        Child = new FillFlowContainer
+                        RelativeSizeAxes = Axes.X,
+                        AutoSizeAxes = Axes.Y,
+                        Direction = FillDirection.Horizontal,
+                        Spacing = new Vector2(8, 0),
+                        Children = new Drawable[]
                         {
-                            RelativeSizeAxes = Axes.X,
-                            AutoSizeAxes = Axes.Y,
-                            Direction = FillDirection.Vertical,
-                            Spacing = new Vector2(0, 10),
-                            Children = new Drawable[]
+                            _minusButton = new FunctionButton("-10")
                             {
-                                new SpriteText
+                                Width = 45,
+                                Height = 32
+                            },
+                            new Container
+                            {
+                                Width = 90,
+                                Height = 32,
+                                Masking = true,
+                                CornerRadius = 4,
+                                Children = new Drawable[]
                                 {
-                                    Text = "Universal Offset",
-                                    Font = new FontUsage("", 16, "Bold"),
-                                    Colour = new Color4(255, 102, 170, 255)
-                                },
-                                new FillFlowContainer
-                                {
-                                    RelativeSizeAxes = Axes.X,
-                                    AutoSizeAxes = Axes.Y,
-                                    Direction = FillDirection.Horizontal,
-                                    Spacing = new Vector2(8, 0),
-                                    Children = new Drawable[]
+                                    new Box
                                     {
-                                        _minusButton = new FunctionButton("-10")
-                                        {
-                                            Width = 50,
-                                            Height = 35
-                                        },
-                                        new Container
-                                        {
-                                            Width = 120,
-                                            Height = 35,
-                                            Children = new Drawable[]
-                                            {
-                                                new Box
-                                                {
-                                                    RelativeSizeAxes = Axes.Both,
-                                                    Colour = new Color4(25, 25, 30, 255)
-                                                },
-                                                _offsetTextBox = new BasicTextBox
-                                                {
-                                                    RelativeSizeAxes = Axes.Both,
-                                                    Text = "0",
-                                                    PlaceholderText = "Offset (ms)",
-                                                    CommitOnFocusLost = true
-                                                }
-                                            }
-                                        },
-                                        new SpriteText
-                                        {
-                                            Text = "ms",
-                                            Font = new FontUsage("", 14),
-                                            Colour = new Color4(150, 150, 150, 255),
-                                            Anchor = Anchor.CentreLeft,
-                                            Origin = Anchor.CentreLeft
-                                        },
-                                        _plusButton = new FunctionButton("+10")
-                                        {
-                                            Width = 50,
-                                            Height = 35
-                                        },
-                                        _applyButton = new FunctionButton("Apply Offset")
-                                        {
-                                            Width = 120,
-                                            Height = 35,
-                                            Enabled = false
-                                        }
+                                        RelativeSizeAxes = Axes.Both,
+                                        Colour = new Color4(35, 35, 40, 255)
+                                    },
+                                    _offsetTextBox = new BasicTextBox
+                                    {
+                                        RelativeSizeAxes = Axes.Both,
+                                        Text = "0",
+                                        PlaceholderText = "ms",
+                                        CommitOnFocusLost = true
                                     }
                                 }
+                            },
+                            new Container
+                            {
+                                Width = 25,
+                                Height = 32,
+                                Child = new SpriteText
+                                {
+                                    Text = "ms",
+                                    Font = new FontUsage("", 13),
+                                    Colour = new Color4(100, 100, 100, 255),
+                                    Anchor = Anchor.CentreLeft,
+                                    Origin = Anchor.CentreLeft
+                                }
+                            },
+                            _plusButton = new FunctionButton("+10")
+                            {
+                                Width = 45,
+                                Height = 32
+                            },
+                            _applyButton = new FunctionButton("Apply")
+                            {
+                                Width = 70,
+                                Height = 32,
+                                Enabled = false
                             }
                         }
                     }

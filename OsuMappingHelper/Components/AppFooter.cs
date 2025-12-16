@@ -2,6 +2,8 @@ using osu.Framework.Allocation;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
 using osu.Framework.Graphics.Shapes;
+using osu.Framework.Graphics.Sprites;
+using OsuMappingHelper.Services;
 using osuTK.Graphics;
 
 namespace OsuMappingHelper.Components;
@@ -11,6 +13,9 @@ namespace OsuMappingHelper.Components;
 /// </summary>
 public partial class AppFooter : CompositeDrawable
 {
+    [Resolved]
+    private AutoUpdaterService AutoUpdaterService { get; set; } = null!;
+
     private readonly Color4 _accentColor = new Color4(255, 102, 170, 255);
     private readonly Color4 _kofiColor = new Color4(255, 95, 95, 255);
 
@@ -47,6 +52,15 @@ public partial class AppFooter : CompositeDrawable
                 Padding = new MarginPadding { Left = 15, Right = 15 },
                 Children = new Drawable[]
                 {
+                    // Version display (left)
+                    new SpriteText
+                    {
+                        Anchor = Anchor.CentreLeft,
+                        Origin = Anchor.CentreLeft,
+                        Text = AutoUpdaterService.CurrentVersion,
+                        Font = new FontUsage("", 11),
+                        Colour = new Color4(120, 120, 120, 255)
+                    },
                     // Copyright / credit link (center)
                     new LinkText(
                         "Companella! -Leyna",
@@ -87,8 +101,8 @@ public partial class AppFooter : CompositeDrawable
                     AutoSizeAxes = Axes.Both,
                     Padding = new MarginPadding { Left = 8, Right = 8, Top = 3, Bottom = 3 },
                     Child = new LinkText(
-                        "Support on Ko-fi",
-                        "https://ko-fi.com/leynadev",
+                        "buymeacoffee",
+                        "https://buymeacoffee.com/leynadev",
                         fontSize: 10f,
                         fontWeight: "Bold",
                         normalColor: Color4.White,

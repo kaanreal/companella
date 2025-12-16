@@ -23,7 +23,9 @@ public class AutoUpdaterService : IDisposable
     private static readonly HashSet<string> PreservedFiles = new(StringComparer.OrdinalIgnoreCase)
     {
         "settings.json",
-        "dans.json" // Preserve custom dan configurations
+        "dans.json", // Preserve custom dan configurations
+        "sessions.db", // Preserve session history database
+        "maps.db" // Preserve indexed maps database
     };
 
     private readonly HttpClient _httpClient;

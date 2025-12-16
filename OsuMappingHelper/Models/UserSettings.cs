@@ -73,4 +73,16 @@ public class UserSettings
     /// </summary>
     [JsonPropertyName("overlayOffsetY")]
     public int OverlayOffsetY { get; set; } = 0;
+
+    /// <summary>
+    /// Whether to automatically start a session when the application starts.
+    /// </summary>
+    [JsonPropertyName("autoStartSession")]
+    public bool AutoStartSession { get; set; } = false;
+
+    /// <summary>
+    /// Whether to automatically end the session when the application exits.
+    /// </summary>
+    [JsonPropertyName("autoEndSession")]
+    public bool AutoEndSession { get; set; } = false;
 }

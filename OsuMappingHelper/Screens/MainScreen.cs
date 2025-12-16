@@ -38,6 +38,10 @@ public partial class MainScreen : osu.Framework.Screens.Screen
     
     // Gameplay tab components
     private RateChangerPanel _rateChangerPanel = null!;
+    private SessionTrackerPanel _sessionTrackerPanel = null!;
+    private SessionHistoryPanel _sessionHistoryPanel = null!;
+    private SkillsAnalysisPanel _skillsAnalysisPanel = null!;
+    private SessionPlannerPanel _sessionPlannerPanel = null!;
     
     // Mapping tab components
     private FunctionButtonPanel _functionPanel = null!;
@@ -205,71 +209,104 @@ public partial class MainScreen : osu.Framework.Screens.Screen
 
     private Container CreateGameplayTab()
     {
+        // Create panels for gameplay features (auto-sized)
+        _rateChangerPanel = new RateChangerPanel();
+        _sessionTrackerPanel = new SessionTrackerPanel();
+        _sessionHistoryPanel = new SessionHistoryPanel();
+        _skillsAnalysisPanel = new SkillsAnalysisPanel();
+        _sessionPlannerPanel = new SessionPlannerPanel();
+        
+        // Wire up skills analysis panel to load recommended maps
+        _skillsAnalysisPanel.MapSelected += OnRecommendedMapSelected;
+        
+        // Wire up loading overlay events from recommendation panel
+        _skillsAnalysisPanel.LoadingStarted += status => 
+        {
+            Schedule(() => _loadingOverlay.Show(status));
+        };
+        _skillsAnalysisPanel.LoadingStatusChanged += status =>
+        {
+            Schedule(() => _loadingOverlay.UpdateStatus(status));
+        };
+        _skillsAnalysisPanel.LoadingFinished += () =>
+        {
+            Schedule(() => _loadingOverlay.Hide());
+        };
+
+        // Wire up loading overlay events from session planner panel
+        _sessionPlannerPanel.LoadingStarted += status =>
+        {
+            Schedule(() => _loadingOverlay.Show(status));
+        };
+        _sessionPlannerPanel.LoadingStatusChanged += status =>
+        {
+            Schedule(() => _loadingOverlay.UpdateStatus(status));
+        };
+        _sessionPlannerPanel.LoadingFinished += () =>
+        {
+            Schedule(() => _loadingOverlay.Hide());
+        };
+
+        // Pass skill trends from analysis to session planner
+        _skillsAnalysisPanel.TrendsUpdated += trends =>
+        {
+            _sessionPlannerPanel.SetTrends(trends);
+        };
+
+        var splitContainer = new SplitTabContainer(new[]
+        {
+            new SplitTabItem("Rate Changer", _rateChangerPanel),
+            new SplitTabItem("Session Tracker", _sessionTrackerPanel),
+            new SplitTabItem("Session History", _sessionHistoryPanel),
+            new SplitTabItem("Skills Analysis", _skillsAnalysisPanel),
+            new SplitTabItem("Session Planner", _sessionPlannerPanel)
+        })
+        {
+            RelativeSizeAxes = Axes.Both
+        };
+
         return new Container
         {
             RelativeSizeAxes = Axes.Both,
-            Child = new BasicScrollContainer
-            {
-                RelativeSizeAxes = Axes.Both,
-                ClampExtension = 0,
-                Child = new FillFlowContainer
-                {
-                    RelativeSizeAxes = Axes.X,
-                    AutoSizeAxes = Axes.Y,
-                    Direction = FillDirection.Vertical,
-                    Spacing = new Vector2(0, 8),
-                    Children = new Drawable[]
-                    {
-                        // Rate changer panel
-                        _rateChangerPanel = new RateChangerPanel
-                        {
-                            RelativeSizeAxes = Axes.X,
-                            Height = 220
-                        }
-                    }
-                }
-            }
+            Child = splitContainer
         };
     }
 
     private Container CreateMappingTab()
     {
+        // Create panels for mapping features (auto-sized via constructors)
+        _functionPanel = new FunctionButtonPanel();
+        _offsetPanel = new OffsetInputPanel();
+        _bulkRateChangerPanel = new BulkRateChangerPanel();
+
+        // Combine BPM Analysis and Normalize SV into one panel
+        var timingToolsContent = new FillFlowContainer
+        {
+            RelativeSizeAxes = Axes.X,
+            AutoSizeAxes = Axes.Y,
+            Direction = FillDirection.Vertical,
+            Spacing = new Vector2(0, 10),
+            Children = new Drawable[]
+            {
+                _functionPanel,
+                _offsetPanel
+            }
+        };
+
+        var splitContainer = new SplitTabContainer(new[]
+        {
+            new SplitTabItem("Timing Tools", timingToolsContent),
+            new SplitTabItem("Bulk Rates", _bulkRateChangerPanel)
+            // Future mapping features can be added here
+        })
+        {
+            RelativeSizeAxes = Axes.Both
+        };
+
         return new Container
         {
             RelativeSizeAxes = Axes.Both,
-            Child = new BasicScrollContainer
-            {
-                RelativeSizeAxes = Axes.Both,
-                ClampExtension = 0,
-                Child = new FillFlowContainer
-                {
-                    RelativeSizeAxes = Axes.X,
-                    AutoSizeAxes = Axes.Y,
-                    Direction = FillDirection.Vertical,
-                    Spacing = new Vector2(0, 8),
-                    Children = new Drawable[]
-                    {
-                        // Function buttons (Analyze BPM, Normalize SV)
-                        _functionPanel = new FunctionButtonPanel
-                        {
-                            RelativeSizeAxes = Axes.X,
-                            Height = 60
-                        },
-                        // Offset input panel
-                        _offsetPanel = new OffsetInputPanel
-                        {
-                            RelativeSizeAxes = Axes.X,
-                            Height = 85
-                        },
-                        // Bulk rate changer
-                        _bulkRateChangerPanel = new BulkRateChangerPanel
-                        {
-                            RelativeSizeAxes = Axes.X,
-                            Height = 210
-                        }
-                    }
-                }
-            }
+            Child = splitContainer
         };
     }
 
@@ -291,6 +328,16 @@ public partial class MainScreen : osu.Framework.Screens.Screen
                     Padding = new MarginPadding { Top = 10 },
                     Children = new Drawable[]
                     {
+                        // Map indexing controls
+                        new MapIndexingPanel
+                        {
+                            RelativeSizeAxes = Axes.X
+                        },
+                        // Session auto-start settings
+                        new SessionAutoStartPanel
+                        {
+                            RelativeSizeAxes = Axes.X
+                        },
                         // Overlay position offset
                         new OverlayPositionPanel
                         {
@@ -365,6 +412,38 @@ public partial class MainScreen : osu.Framework.Screens.Screen
     public void HandleFileDrop(string filePath)
     {
         _dropZone.HandleFileDrop(filePath);
+    }
+
+    /// <summary>
+    /// Handles selection of a recommended map from the skills analysis panel.
+    /// </summary>
+    private void OnRecommendedMapSelected(Models.MapRecommendation recommendation)
+    {
+        if (string.IsNullOrEmpty(recommendation.BeatmapPath))
+        {
+            _statusDisplay.SetStatus("Recommendation has no valid beatmap path", StatusType.Error);
+            return;
+        }
+
+        if (!File.Exists(recommendation.BeatmapPath))
+        {
+            _statusDisplay.SetStatus($"Beatmap file not found: {recommendation.BeatmapPath}", StatusType.Error);
+            return;
+        }
+
+        // Load the beatmap in this application
+        LoadBeatmap(recommendation.BeatmapPath);
+        
+        // If a rate change is suggested, pre-fill the rate changer
+        if (recommendation.SuggestedRate.HasValue && Math.Abs(recommendation.SuggestedRate.Value - 1.0f) > 0.05f)
+        {
+            _rateChangerPanel.SetRate(recommendation.SuggestedRate.Value);
+            _statusDisplay.SetStatus($"Loaded: {recommendation.DisplayName} (suggested {recommendation.SuggestedRate:0.0#}x) - find in 'Companella!' collection", StatusType.Success);
+        }
+        else
+        {
+            _statusDisplay.SetStatus($"Loaded: {recommendation.DisplayName} - find in 'Companella!' collection", StatusType.Success);
+        }
     }
 
     private void LoadBeatmap(string filePath)
