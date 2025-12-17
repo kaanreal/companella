@@ -54,6 +54,9 @@ public partial class OsuMappingHelperGame : Game
     private MapRecommendationService _mapRecommendationService = null!;
     private OsuCollectionService _collectionService = null!;
     
+    // Tray icon
+    private TrayIconService _trayIconService = null!;
+    
     // Overlay state
     private bool _isWindowVisible = true;
     private bool _wasOsuRunning = false;
@@ -93,6 +96,9 @@ public partial class OsuMappingHelperGame : Game
         _mapMmrCalculator = new MapMmrCalculator(_mapsDatabaseService);
         _mapRecommendationService = new MapRecommendationService(_mapsDatabaseService, _mapMmrCalculator, _skillsTrendAnalyzer);
         _collectionService = new OsuCollectionService(_processDetector);
+        
+        // Tray icon
+        _trayIconService = new TrayIconService();
 
         _dependencies.CacheAs(_processDetector);
         _dependencies.CacheAs(_fileParser);
@@ -112,6 +118,7 @@ public partial class OsuMappingHelperGame : Game
         _dependencies.CacheAs(_mapMmrCalculator);
         _dependencies.CacheAs(_mapRecommendationService);
         _dependencies.CacheAs(_collectionService);
+        _dependencies.CacheAs(_trayIconService);
 
         return _dependencies;
     }
@@ -158,6 +165,7 @@ public partial class OsuMappingHelperGame : Game
                 RestoreWindowSettings();
                 InitializeOverlayAndHotkeys();
                 MakeWindowBorderless();
+                InitializeTrayIcon();
                 
                 // Auto-start session if enabled in settings
                 if (_userSettingsService.Settings.AutoStartSession && !_sessionTrackerService.IsTracking)
@@ -331,6 +339,80 @@ public partial class OsuMappingHelperGame : Game
         {
             Console.WriteLine($"[Hotkey] Error initializing hotkey: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// Initializes the system tray icon.
+    /// </summary>
+    private void InitializeTrayIcon()
+    {
+        if (_trayIconService == null)
+            return;
+
+        try
+        {
+            _trayIconService.Initialize();
+            _trayIconService.CheckForUpdatesRequested += OnTrayCheckForUpdatesRequested;
+            _trayIconService.ExitRequested += OnTrayExitRequested;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[TrayIcon] Error initializing tray icon: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Handles the tray icon "Check for Updates" menu item click.
+    /// </summary>
+    private async void OnTrayCheckForUpdatesRequested(object? sender, EventArgs e)
+    {
+        if (_autoUpdaterService == null)
+            return;
+
+        try
+        {
+            _trayIconService?.ShowNotification("Companella!", "Checking for updates...", System.Windows.Forms.ToolTipIcon.Info, 2000);
+            
+            var updateInfo = await _autoUpdaterService.CheckForUpdatesAsync();
+            
+            if (updateInfo != null)
+            {
+                _trayIconService?.ShowNotification(
+                    "Update Available", 
+                    $"Version {updateInfo.TagName} is available. Open the app to update.",
+                    System.Windows.Forms.ToolTipIcon.Info,
+                    5000);
+            }
+            else
+            {
+                _trayIconService?.ShowNotification(
+                    "Companella!", 
+                    $"You are running the latest version ({_autoUpdaterService.CurrentVersion}).",
+                    System.Windows.Forms.ToolTipIcon.Info,
+                    3000);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[TrayIcon] Error checking for updates: {ex.Message}");
+            _trayIconService?.ShowNotification(
+                "Update Check Failed", 
+                "Could not check for updates. Please try again later.",
+                System.Windows.Forms.ToolTipIcon.Warning,
+                3000);
+        }
+    }
+
+    /// <summary>
+    /// Handles the tray icon "Exit" menu item click.
+    /// </summary>
+    private void OnTrayExitRequested(object? sender, EventArgs e)
+    {
+        // Exit the application gracefully
+        Schedule(() =>
+        {
+            Host.Exit();
+        });
     }
 
     /// <summary>
@@ -755,6 +837,13 @@ public partial class OsuMappingHelperGame : Game
             Console.WriteLine("[Session] Auto-ended session on exit");
         }
         
+        // Unsubscribe from tray icon events
+        if (_trayIconService != null)
+        {
+            _trayIconService.CheckForUpdatesRequested -= OnTrayCheckForUpdatesRequested;
+            _trayIconService.ExitRequested -= OnTrayExitRequested;
+        }
+        
         _processDetector?.Dispose();
         _overlayService?.Dispose();
         _hotkeyService?.Dispose();
@@ -762,6 +851,7 @@ public partial class OsuMappingHelperGame : Game
         _sessionTrackerService?.Dispose();
         _sessionDatabaseService?.Dispose();
         _mapsDatabaseService?.Dispose();
+        _trayIconService?.Dispose();
         base.Dispose(isDisposing);
     }
 }
