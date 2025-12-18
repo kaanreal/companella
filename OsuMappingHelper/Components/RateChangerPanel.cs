@@ -19,16 +19,25 @@ namespace OsuMappingHelper.Components;
 public partial class RateChangerPanel : CompositeDrawable
 {
     private StyledTextBox _rateTextBox = null!;
+    private StyledTextBox _targetBpmTextBox = null!;
     private StyledTextBox _formatTextBox = null!;
     private ModernButton _applyButton = null!;
     private SpriteText _previewText = null!;
+    private SpriteText _currentBpmLabel = null!;
     private FillFlowContainer _quickRateButtons = null!;
+    private ModeToggleButton _rateModeButton = null!;
+    private ModeToggleButton _bpmModeButton = null!;
+    private Container _rateInputContainer = null!;
+    private Container _bpmInputContainer = null!;
 
     public event Action<double, string>? ApplyRateClicked;
     public event Action<string>? FormatChanged;
     public event Action<double, string>? PreviewRequested;
 
     private double _currentRate = 1.0;
+    private double _currentMapBpm = 120.0;
+    private double _targetBpm = 120.0;
+    private bool _isTargetBpmMode = false;
     private string _currentFormat = RateChanger.DefaultNameFormat;
 
     private readonly Color4 _accentColor = new Color4(255, 102, 170, 255);
@@ -52,52 +61,123 @@ public partial class RateChangerPanel : CompositeDrawable
                 Spacing = new Vector2(0, 12),
                 Children = new Drawable[]
                 {
-                    // Rate Selection Section
-                    CreateSection("Rate", new Drawable[]
+                    // Mode Toggle Section
+                    CreateSection("Mode", new Drawable[]
                     {
-                        // Quick rate buttons
-                        _quickRateButtons = new FillFlowContainer
-                        {
-                            RelativeSizeAxes = Axes.X,
-                            AutoSizeAxes = Axes.Y,
-                            Direction = FillDirection.Horizontal,
-                            Spacing = new Vector2(6, 6),
-                            Children = CreateQuickRateButtons()
-                        },
-                        // Custom rate input
                         new FillFlowContainer
                         {
                             RelativeSizeAxes = Axes.X,
                             AutoSizeAxes = Axes.Y,
                             Direction = FillDirection.Horizontal,
-                            Spacing = new Vector2(8, 0),
-                            Margin = new MarginPadding { Top = 8 },
+                            Spacing = new Vector2(6, 0),
                             Children = new Drawable[]
                             {
-                                new SpriteText
+                                _rateModeButton = new ModeToggleButton("Rate", true, _accentColor)
                                 {
-                                    Text = "Custom:",
-                                    Font = new FontUsage("", 13),
-                                    Colour = new Color4(140, 140, 140, 255),
-                                    Anchor = Anchor.CentreLeft,
-                                    Origin = Anchor.CentreLeft
+                                    Size = new Vector2(80, 28),
+                                    Action = () => SetMode(isTargetBpmMode: false)
                                 },
-                                _rateTextBox = new StyledTextBox
+                                _bpmModeButton = new ModeToggleButton("Target BPM", false, _accentColor)
                                 {
-                                    Size = new Vector2(80, 32),
-                                    PlaceholderText = "1.0"
+                                    Size = new Vector2(100, 28),
+                                    Action = () => SetMode(isTargetBpmMode: true)
                                 },
-                                new SpriteText
+                                _currentBpmLabel = new SpriteText
                                 {
-                                    Text = "x",
-                                    Font = new FontUsage("", 14),
+                                    Text = "(Current: --)",
+                                    Font = new FontUsage("", 12),
                                     Colour = new Color4(100, 100, 100, 255),
                                     Anchor = Anchor.CentreLeft,
-                                    Origin = Anchor.CentreLeft
+                                    Origin = Anchor.CentreLeft,
+                                    Margin = new MarginPadding { Left = 8 }
                                 }
                             }
                         }
                     }),
+                    // Rate Selection Section (shown in Rate mode)
+                    _rateInputContainer = new Container
+                    {
+                        RelativeSizeAxes = Axes.X,
+                        AutoSizeAxes = Axes.Y,
+                        Child = CreateSection("Rate", new Drawable[]
+                        {
+                            // Quick rate buttons
+                            _quickRateButtons = new FillFlowContainer
+                            {
+                                RelativeSizeAxes = Axes.X,
+                                AutoSizeAxes = Axes.Y,
+                                Direction = FillDirection.Horizontal,
+                                Spacing = new Vector2(6, 6),
+                                Children = CreateQuickRateButtons()
+                            },
+                            // Custom rate input
+                            new FillFlowContainer
+                            {
+                                RelativeSizeAxes = Axes.X,
+                                AutoSizeAxes = Axes.Y,
+                                Direction = FillDirection.Horizontal,
+                                Spacing = new Vector2(8, 0),
+                                Margin = new MarginPadding { Top = 8 },
+                                Children = new Drawable[]
+                                {
+                                    new SpriteText
+                                    {
+                                        Text = "Custom:",
+                                        Font = new FontUsage("", 13),
+                                        Colour = new Color4(140, 140, 140, 255),
+                                        Anchor = Anchor.CentreLeft,
+                                        Origin = Anchor.CentreLeft
+                                    },
+                                    _rateTextBox = new StyledTextBox
+                                    {
+                                        Size = new Vector2(80, 32),
+                                        PlaceholderText = "1.0"
+                                    },
+                                    new SpriteText
+                                    {
+                                        Text = "x",
+                                        Font = new FontUsage("", 14),
+                                        Colour = new Color4(100, 100, 100, 255),
+                                        Anchor = Anchor.CentreLeft,
+                                        Origin = Anchor.CentreLeft
+                                    }
+                                }
+                            }
+                        })
+                    },
+                    // Target BPM Section (shown in Target BPM mode)
+                    _bpmInputContainer = new Container
+                    {
+                        RelativeSizeAxes = Axes.X,
+                        AutoSizeAxes = Axes.Y,
+                        Alpha = 0,
+                        Child = CreateSection("Target BPM", new Drawable[]
+                        {
+                            new FillFlowContainer
+                            {
+                                RelativeSizeAxes = Axes.X,
+                                AutoSizeAxes = Axes.Y,
+                                Direction = FillDirection.Horizontal,
+                                Spacing = new Vector2(8, 0),
+                                Children = new Drawable[]
+                                {
+                                    _targetBpmTextBox = new StyledTextBox
+                                    {
+                                        Size = new Vector2(100, 32),
+                                        PlaceholderText = "120"
+                                    },
+                                    new SpriteText
+                                    {
+                                        Text = "BPM",
+                                        Font = new FontUsage("", 14),
+                                        Colour = new Color4(100, 100, 100, 255),
+                                        Anchor = Anchor.CentreLeft,
+                                        Origin = Anchor.CentreLeft
+                                    }
+                                }
+                            }
+                        })
+                    },
                     // Format Section
                     CreateSection("Difficulty Name Format", new Drawable[]
                     {
@@ -163,10 +243,12 @@ public partial class RateChangerPanel : CompositeDrawable
 
         // Set initial values
         _rateTextBox.Text = "1.0";
+        _targetBpmTextBox.Text = "120";
         _formatTextBox.Text = _currentFormat;
 
         // Wire up events
         _rateTextBox.OnCommit += OnRateTextCommit;
+        _targetBpmTextBox.OnCommit += OnTargetBpmTextCommit;
         _formatTextBox.OnCommit += OnFormatTextCommit;
         _applyButton.Clicked += OnApplyClicked;
     }
@@ -260,6 +342,72 @@ public partial class RateChangerPanel : CompositeDrawable
         UpdatePreview();
     }
 
+    private void OnTargetBpmTextCommit(TextBox sender, bool newText)
+    {
+        if (double.TryParse(sender.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out var value))
+        {
+            _targetBpm = Math.Clamp(value, 10, 1000);
+            sender.Text = _targetBpm.ToString("0.#", CultureInfo.InvariantCulture);
+            
+            // Calculate rate from target BPM
+            if (_currentMapBpm > 0)
+            {
+                _currentRate = Math.Clamp(_targetBpm / _currentMapBpm, 0.1, 5.0);
+            }
+        }
+        else
+        {
+            sender.Text = _targetBpm.ToString("0.#", CultureInfo.InvariantCulture);
+        }
+        UpdatePreview();
+    }
+
+    /// <summary>
+    /// Sets the mode (Rate or Target BPM).
+    /// </summary>
+    private void SetMode(bool isTargetBpmMode)
+    {
+        if (_isTargetBpmMode == isTargetBpmMode) return;
+        
+        _isTargetBpmMode = isTargetBpmMode;
+        
+        _rateModeButton.SetSelected(!isTargetBpmMode);
+        _bpmModeButton.SetSelected(isTargetBpmMode);
+        
+        if (isTargetBpmMode)
+        {
+            _rateInputContainer.FadeOut(150);
+            _bpmInputContainer.FadeIn(150);
+            
+            // Initialize target BPM from current rate
+            _targetBpm = _currentMapBpm * _currentRate;
+            _targetBpmTextBox.Text = _targetBpm.ToString("0.#", CultureInfo.InvariantCulture);
+        }
+        else
+        {
+            _rateInputContainer.FadeIn(150);
+            _bpmInputContainer.FadeOut(150);
+        }
+        
+        UpdatePreview();
+    }
+
+    /// <summary>
+    /// Sets the current map's BPM for target BPM calculations.
+    /// </summary>
+    public void SetCurrentMapBpm(double bpm)
+    {
+        _currentMapBpm = bpm > 0 ? bpm : 120;
+        _currentBpmLabel.Text = $"(Current: {_currentMapBpm:0.#} BPM)";
+        
+        // If in target BPM mode, recalculate rate
+        if (_isTargetBpmMode && _currentMapBpm > 0)
+        {
+            _currentRate = Math.Clamp(_targetBpm / _currentMapBpm, 0.1, 5.0);
+            UpdatePreview();
+        }
+    }
+
     private void OnFormatTextCommit(TextBox sender, bool newText)
     {
         _currentFormat = sender.Text;
@@ -351,6 +499,94 @@ public partial class QuickRateButton : CompositeDrawable
             _label = new SpriteText
             {
                 Text = $"{Rate:0.0#}x",
+                Font = new FontUsage("", 12, _isSelected ? "Bold" : ""),
+                Colour = _isSelected ? Color4.White : new Color4(180, 180, 180, 255),
+                Anchor = Anchor.Centre,
+                Origin = Anchor.Centre
+            }
+        };
+    }
+
+    public void SetSelected(bool selected)
+    {
+        _isSelected = selected;
+        _background.FadeColour(_isSelected ? _selectedBg : _normalBg, 150);
+        _label.FadeColour(_isSelected ? Color4.White : new Color4(180, 180, 180, 255), 150);
+        _label.Font = new FontUsage("", 12, _isSelected ? "Bold" : "");
+    }
+
+    protected override bool OnHover(HoverEvent e)
+    {
+        if (!_isSelected)
+        {
+            _hoverOverlay.FadeTo(0.1f, 100);
+            _background.FadeColour(_hoverBg, 100);
+        }
+        return base.OnHover(e);
+    }
+
+    protected override void OnHoverLost(HoverLostEvent e)
+    {
+        _hoverOverlay.FadeTo(0, 100);
+        if (!_isSelected)
+            _background.FadeColour(_normalBg, 100);
+        base.OnHoverLost(e);
+    }
+
+    protected override bool OnClick(ClickEvent e)
+    {
+        Action?.Invoke();
+        return true;
+    }
+}
+
+/// <summary>
+/// Toggle button for mode selection (Rate vs Target BPM).
+/// </summary>
+public partial class ModeToggleButton : CompositeDrawable
+{
+    public Action? Action { get; set; }
+
+    private bool _isSelected;
+    private Box _background = null!;
+    private Box _hoverOverlay = null!;
+    private SpriteText _label = null!;
+    private readonly string _text;
+    private readonly Color4 _accentColor;
+
+    private readonly Color4 _normalBg = new Color4(45, 45, 50, 255);
+    private readonly Color4 _selectedBg = new Color4(255, 102, 170, 255);
+    private readonly Color4 _hoverBg = new Color4(60, 60, 65, 255);
+
+    public ModeToggleButton(string text, bool isSelected, Color4 accentColor)
+    {
+        _text = text;
+        _isSelected = isSelected;
+        _accentColor = accentColor;
+    }
+
+    [BackgroundDependencyLoader]
+    private void load()
+    {
+        Masking = true;
+        CornerRadius = 4;
+
+        InternalChildren = new Drawable[]
+        {
+            _background = new Box
+            {
+                RelativeSizeAxes = Axes.Both,
+                Colour = _isSelected ? _selectedBg : _normalBg
+            },
+            _hoverOverlay = new Box
+            {
+                RelativeSizeAxes = Axes.Both,
+                Colour = Color4.White,
+                Alpha = 0
+            },
+            _label = new SpriteText
+            {
+                Text = _text,
                 Font = new FontUsage("", 12, _isSelected ? "Bold" : ""),
                 Colour = _isSelected ? Color4.White : new Color4(180, 180, 180, 255),
                 Anchor = Anchor.Centre,

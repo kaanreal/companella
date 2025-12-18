@@ -22,6 +22,9 @@ public partial class MapIndexingPanel : CompositeDrawable
     
     [Resolved]
     private OsuProcessDetector ProcessDetector { get; set; } = null!;
+    
+    [Resolved]
+    private AptabaseService AptabaseService { get; set; } = null!;
 
     private SpriteText _statusText = null!;
     private SpriteText _mapCountText = null!;
@@ -201,10 +204,14 @@ public partial class MapIndexingPanel : CompositeDrawable
             else if (e.FailedFiles > 0)
             {
                 _statusText.Text = $"Done: {e.IndexedFiles} indexed, {e.FailedFiles} failed.";
+                // Track analytics
+                AptabaseService.TrackMapIndexing(e.IndexedFiles);
             }
             else
             {
                 _statusText.Text = $"Done: {e.IndexedFiles} maps indexed.";
+                // Track analytics
+                AptabaseService.TrackMapIndexing(e.IndexedFiles);
             }
         });
     }

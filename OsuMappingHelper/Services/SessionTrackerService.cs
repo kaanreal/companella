@@ -14,6 +14,7 @@ public class SessionTrackerService : IDisposable
     private readonly OsuProcessDetector _processDetector;
     private readonly SessionDatabaseService _databaseService;
     private readonly StructuredOsuMemoryReader _memoryReader;
+    private readonly AptabaseService? _aptabaseService;
     private readonly object _lockObj = new();
     
     private Thread? _trackingThread;
@@ -99,11 +100,12 @@ public class SessionTrackerService : IDisposable
     /// <summary>
     /// Creates a new SessionTrackerService.
     /// </summary>
-    public SessionTrackerService(OsuProcessDetector processDetector, SessionDatabaseService databaseService)
+    public SessionTrackerService(OsuProcessDetector processDetector, SessionDatabaseService databaseService, AptabaseService? aptabaseService = null)
     {
         _processDetector = processDetector;
         _databaseService = databaseService;
         _memoryReader = StructuredOsuMemoryReader.Instance;
+        _aptabaseService = aptabaseService;
     }
     
     /// <summary>
@@ -135,6 +137,9 @@ public class SessionTrackerService : IDisposable
         IsTracking = true;
         _trackingThread.Start();
         
+        // Track analytics
+        _aptabaseService?.TrackSessionStart();
+        
         SessionStarted?.Invoke(this, EventArgs.Empty);
         StatusUpdated?.Invoke(this, "Session started");
         Console.WriteLine("[Session] Session tracking started");
@@ -161,6 +166,15 @@ public class SessionTrackerService : IDisposable
         _trackingThread = null;
         
         IsTracking = false;
+        
+        // Track analytics
+        var durationMinutes = (DateTime.UtcNow - _sessionStartTime).TotalMinutes;
+        int playCount;
+        lock (_lockObj)
+        {
+            playCount = _plays.Count;
+        }
+        _aptabaseService?.TrackSessionStop(durationMinutes, playCount);
         
         // Save session to database
         SaveSessionToDatabase();
@@ -423,6 +437,9 @@ public class SessionTrackerService : IDisposable
         {
             _plays.Add(playResult);
         }
+        
+        // Track analytics
+        _aptabaseService?.TrackPlayRecorded(accuracy, highestMsd, dominantSkillset);
         
         // Raise event
         PlayRecorded?.Invoke(this, playResult);

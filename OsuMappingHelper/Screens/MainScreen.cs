@@ -30,6 +30,9 @@ public partial class MainScreen : osu.Framework.Screens.Screen
     [Resolved]
     private AutoUpdaterService AutoUpdaterService { get; set; } = null!;
 
+    [Resolved]
+    private AptabaseService AptabaseService { get; set; } = null!;
+
     // Header components
     private MapInfoDisplay _mapInfoDisplay = null!;
     
@@ -168,6 +171,7 @@ public partial class MainScreen : osu.Framework.Screens.Screen
         _rateChangerPanel.FormatChanged += OnRateChangerFormatChanged;
         _bulkRateChangerPanel.ApplyBulkRateClicked += OnApplyBulkRateClicked;
         _bulkRateChangerPanel.FormatChanged += OnRateChangerFormatChanged;
+        _tabContainer.TabChanged += OnTabChanged;
 
         // Restore saved rate changer format to both panels
         var savedFormat = UserSettingsService.Settings.RateChangerFormat;
@@ -192,6 +196,9 @@ public partial class MainScreen : osu.Framework.Screens.Screen
             await Task.Delay(2000);
 
             var updateInfo = await AutoUpdaterService.CheckForUpdatesAsync();
+            
+            // Track analytics
+            AptabaseService.TrackUpdateCheck(updateInfo != null);
             
             if (updateInfo != null)
             {
@@ -318,14 +325,15 @@ public partial class MainScreen : osu.Framework.Screens.Screen
             Child = new BasicScrollContainer
             {
                 RelativeSizeAxes = Axes.Both,
-                ClampExtension = 0,
+                ClampExtension = 200,
+                ScrollbarVisible = true,
                 Child = new FillFlowContainer
                 {
                     RelativeSizeAxes = Axes.X,
                     AutoSizeAxes = Axes.Y,
                     Direction = FillDirection.Vertical,
                     Spacing = new Vector2(0, 16),
-                    Padding = new MarginPadding { Top = 10 },
+                    Padding = new MarginPadding { Top = 10, Bottom = 400 },
                     Children = new Drawable[]
                     {
                         // Map indexing controls
@@ -343,11 +351,16 @@ public partial class MainScreen : osu.Framework.Screens.Screen
                         {
                             RelativeSizeAxes = Axes.X
                         },
+                        // Analytics/privacy settings
+                        new AnalyticsSettingsPanel
+                        {
+                            RelativeSizeAxes = Axes.X
+                        },
                         // Keybind configuration
                         new KeybindConfigPanel
                         {
                             RelativeSizeAxes = Axes.X
-                        }
+                        },
                     }
                 }
             }
@@ -361,6 +374,9 @@ public partial class MainScreen : osu.Framework.Screens.Screen
             var info = ProcessDetector.GetProcessInfo();
             _statusDisplay.SetStatus($"Connected to osu! (PID: {info?.ProcessId})", StatusType.Success);
             _mapInfoDisplay.SetConnected();
+            
+            // Track analytics
+            AptabaseService.TrackOsuConnection(connected: true);
 
             // Subscribe to file modification events
             ProcessDetector.BeatmapFileModified += OnBeatmapFileModified;
@@ -430,6 +446,9 @@ public partial class MainScreen : osu.Framework.Screens.Screen
             _statusDisplay.SetStatus($"Beatmap file not found: {recommendation.BeatmapPath}", StatusType.Error);
             return;
         }
+        
+        // Track analytics
+        AptabaseService.TrackRecommendationSelected(recommendation.Focus.ToString());
 
         // Load the beatmap in this application
         LoadBeatmap(recommendation.BeatmapPath);
@@ -458,6 +477,10 @@ public partial class MainScreen : osu.Framework.Screens.Screen
             _bulkRateChangerPanel.SetEnabled(true);
             _statusDisplay.SetStatus($"Loaded: {_currentOsuFile.DisplayName}", StatusType.Success);
             
+            // Get dominant BPM and pass to rate changer panel
+            var dominantBpm = GetDominantBpm(_currentOsuFile);
+            _rateChangerPanel.SetCurrentMapBpm(dominantBpm);
+            
             // Update rate changer preview
             UpdateRatePreview(1.0, RateChanger.DefaultNameFormat);
         }
@@ -471,6 +494,30 @@ public partial class MainScreen : osu.Framework.Screens.Screen
         }
     }
 
+    /// <summary>
+    /// Gets the dominant BPM from the current osu file's timing points.
+    /// </summary>
+    private double GetDominantBpm(OsuFile osuFile)
+    {
+        var uninherited = osuFile.TimingPoints.Where(tp => tp.Uninherited && tp.BeatLength > 0).ToList();
+        if (uninherited.Count == 0) return 120;
+        if (uninherited.Count == 1) return uninherited[0].Bpm;
+
+        // Find BPM with longest duration
+        var bpmDurations = new Dictionary<double, double>();
+        for (int i = 0; i < uninherited.Count; i++)
+        {
+            var bpm = Math.Round(uninherited[i].Bpm, 1);
+            var duration = i < uninherited.Count - 1 
+                ? uninherited[i + 1].Time - uninherited[i].Time 
+                : 60000;
+            if (!bpmDurations.ContainsKey(bpm)) bpmDurations[bpm] = 0;
+            bpmDurations[bpm] += duration;
+        }
+
+        return bpmDurations.OrderByDescending(kvp => kvp.Value).First().Key;
+    }
+
     private async void OnAnalyzeBpmClicked()
     {
         if (_currentOsuFile == null)
@@ -482,6 +529,9 @@ public partial class MainScreen : osu.Framework.Screens.Screen
         // Capture the BPM factor before starting background task
         _pendingBpmFactor = _functionPanel.SelectedBpmFactor;
         var factorLabel = _pendingBpmFactor.GetLabel();
+        
+        // Track analytics
+        AptabaseService.TrackBpmAnalysis(factorLabel);
 
         _loadingOverlay.Show($"Analyzing BPM ({factorLabel})...");
         _statusDisplay.SetStatus($"Analyzing BPM ({factorLabel})... This may take a few minutes.", StatusType.Info);
@@ -584,6 +634,9 @@ public partial class MainScreen : osu.Framework.Screens.Screen
             _statusDisplay.SetStatus("No beatmap loaded.", StatusType.Error);
             return;
         }
+        
+        // Track analytics
+        AptabaseService.TrackSvNormalization();
 
         _loadingOverlay.Show("Normalizing SV...");
         _statusDisplay.SetStatus("Normalizing scroll velocity...", StatusType.Info);
@@ -672,6 +725,9 @@ public partial class MainScreen : osu.Framework.Screens.Screen
             _statusDisplay.SetStatus("Offset is zero - no changes needed.", StatusType.Warning);
             return;
         }
+        
+        // Track analytics
+        AptabaseService.TrackOffsetApplied(offsetMs);
 
         _loadingOverlay.Show($"Applying {offsetMs:+0.##;-0.##;0}ms offset...");
         SetAllPanelsEnabled(false);
@@ -727,6 +783,13 @@ public partial class MainScreen : osu.Framework.Screens.Screen
         Task.Run(async () => await UserSettingsService.SaveAsync());
     }
 
+    private void OnTabChanged(int tabIndex)
+    {
+        // Track analytics
+        var tabNames = new[] { "Gameplay", "Mapping", "Settings" };
+        var tabName = tabIndex >= 0 && tabIndex < tabNames.Length ? tabNames[tabIndex] : "Unknown";
+    }
+
     private void UpdateRatePreview(double rate, string format)
     {
         if (_currentOsuFile == null)
@@ -736,11 +799,7 @@ public partial class MainScreen : osu.Framework.Screens.Screen
         }
 
         var rateChanger = new RateChanger();
-        var dominantBpm = _currentOsuFile.TimingPoints
-            .Where(tp => tp.Uninherited && tp.BeatLength > 0)
-            .Select(tp => tp.Bpm)
-            .FirstOrDefault();
-        if (dominantBpm == 0) dominantBpm = 120;
+        var dominantBpm = GetDominantBpm(_currentOsuFile);
 
         var newBpm = dominantBpm * rate;
         var previewName = rateChanger.FormatDifficultyName(format, _currentOsuFile, rate, newBpm);
@@ -754,6 +813,9 @@ public partial class MainScreen : osu.Framework.Screens.Screen
             _statusDisplay.SetStatus("No beatmap loaded.", StatusType.Error);
             return;
         }
+        
+        // Track analytics
+        AptabaseService.TrackRateChange(rate, isBulk: false);
 
         var rateChanger = new RateChanger();
         _loadingOverlay.Show("Checking ffmpeg...");
@@ -808,6 +870,12 @@ public partial class MainScreen : osu.Framework.Screens.Screen
             _statusDisplay.SetStatus("No beatmap loaded.", StatusType.Error);
             return;
         }
+        
+        // Calculate how many rates will be created
+        int rateCount = (int)Math.Floor((maxRate - minRate) / step) + 1;
+        
+        // Track analytics
+        AptabaseService.TrackBulkRateChange(minRate, maxRate, step, rateCount);
 
         var rateChanger = new RateChanger();
         _loadingOverlay.Show("Checking ffmpeg...");

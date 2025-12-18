@@ -85,4 +85,11 @@ public class UserSettings
     /// </summary>
     [JsonPropertyName("autoEndSession")]
     public bool AutoEndSession { get; set; } = false;
+
+    /// <summary>
+    /// Whether to send anonymous usage analytics data.
+    /// This helps improve the application by understanding feature usage patterns.
+    /// </summary>
+    [JsonPropertyName("sendAnalytics")]
+    public bool SendAnalytics { get; set; } = true;
 }

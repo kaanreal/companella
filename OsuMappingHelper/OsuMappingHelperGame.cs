@@ -57,6 +57,9 @@ public partial class OsuMappingHelperGame : Game
     // Tray icon
     private TrayIconService _trayIconService = null!;
     
+    // Analytics
+    private AptabaseService _aptabaseService = null!;
+    
     // Overlay state
     private bool _isWindowVisible = true;
     private bool _wasOsuRunning = false;
@@ -76,6 +79,9 @@ public partial class OsuMappingHelperGame : Game
         _dependencies = new DependencyContainer(base.CreateChildDependencies(parent));
 
         // Create and register services
+        // Analytics (created early so it can be injected into other services)
+        _aptabaseService = new AptabaseService();
+        
         _processDetector = new OsuProcessDetector();
         _fileParser = new OsuFileParser();
         _fileWriter = new OsuFileWriter();
@@ -88,7 +94,7 @@ public partial class OsuMappingHelperGame : Game
         _hotkeyService = new GlobalHotkeyService();
         _autoUpdaterService = new AutoUpdaterService();
         _sessionDatabaseService = new SessionDatabaseService();
-        _sessionTrackerService = new SessionTrackerService(_processDetector, _sessionDatabaseService);
+        _sessionTrackerService = new SessionTrackerService(_processDetector, _sessionDatabaseService, _aptabaseService);
         
         // Skills analysis services
         _mapsDatabaseService = new MapsDatabaseService();
@@ -119,6 +125,7 @@ public partial class OsuMappingHelperGame : Game
         _dependencies.CacheAs(_mapRecommendationService);
         _dependencies.CacheAs(_collectionService);
         _dependencies.CacheAs(_trayIconService);
+        _dependencies.CacheAs(_aptabaseService);
 
         return _dependencies;
     }
@@ -151,13 +158,18 @@ public partial class OsuMappingHelperGame : Game
     {
         base.LoadComplete();
         Window.Resizable = false;
-        
 
         // Initialize services
         Task.Run(async () =>
         {
             await _userSettingsService.InitializeAsync();
             await _danConfigService.InitializeAsync();
+            
+            // Apply analytics setting from user preferences (GDPR compliance)
+            _aptabaseService.IsEnabled = _userSettingsService.Settings.SendAnalytics;
+            
+            // Track app startup (only if analytics is enabled)
+            _aptabaseService.TrackAppStarted(_trainingMode);
             
             // Restore window settings on UI thread
             Schedule(() =>
@@ -852,6 +864,7 @@ public partial class OsuMappingHelperGame : Game
         _sessionDatabaseService?.Dispose();
         _mapsDatabaseService?.Dispose();
         _trayIconService?.Dispose();
+        _aptabaseService?.Dispose();
         base.Dispose(isDisposing);
     }
 }
