@@ -24,7 +24,7 @@ struct Args {
     #[arg(short, long)]
     output: Option<PathBuf>,
 
-    /// Only output scores for a specific rate (e.g., 1.0)
+    /// Only output scores for a specific rate (any value > 0, e.g., 1.0, 1.25, 0.85)
     #[arg(short, long)]
     rate: Option<f32>,
 
@@ -68,7 +68,7 @@ pub struct RateEntry {
     pub scores: SkillsetOutput,
 }
 
-/// Full MSD analysis result for JSON output
+/// Full MSD analysis result for JSON output (without --rate flag)
 #[derive(Serialize, Deserialize, Debug)]
 pub struct MsdResult {
     /// Path to the analyzed beatmap file
@@ -77,7 +77,8 @@ pub struct MsdResult {
     /// MinaCalc version used
     pub minacalc_version: i32,
     
-    /// MSD scores for all rates (0.7x to 2.0x in 0.1 increments)
+    /// MSD scores for predefined rates (0.7x to 2.0x in 0.1 increments)
+    /// For arbitrary rates, use the --rate flag instead
     pub rates: Vec<RateEntry>,
     
     /// Dominant skillset at 1.0x rate (the highest non-overall score)
@@ -114,15 +115,21 @@ fn round_2(value: f32) -> f32 {
 /// Rate index to rate value mapping (0.7x to 2.0x)
 const RATES: [f32; 14] = [0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 2.0];
 
-/// Find the rate index for a given rate value
+/// Find the rate index for a given rate value (if it matches a predefined rate)
 fn find_rate_index(rate: f32) -> Option<usize> {
-    // Allow some tolerance for floating point comparison
+    // Very tight tolerance (0.0005) to only match exact predefined rates
+    // This allows 0.001x precision for arbitrary rates
     for (i, &r) in RATES.iter().enumerate() {
-        if (r - rate).abs() < 0.05 {
+        if (r - rate).abs() < 0.0005 {
             return Some(i);
         }
     }
     None
+}
+
+/// Check if rate is valid (any rate > 0)
+fn is_valid_rate(rate: f32) -> bool {
+    rate > 0.0
 }
 
 /// Get the dominant skillset name from scores (highest non-overall score)
@@ -206,16 +213,39 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     
     // Generate JSON output
     let json_output = if let Some(rate) = args.rate {
-        // Single rate output
-        let rate_index = find_rate_index(rate)
-            .ok_or_else(|| format!("Invalid rate: {}. Valid rates are 0.7 to 2.0 in 0.1 increments.", rate))?;
+        // Validate rate is positive
+        if !is_valid_rate(rate) {
+            return Err(format!("Invalid rate: {}. Rate must be greater than 0.", rate).into());
+        }
         
-        let result = convert_single_rate(&all_rates, rate_index, RATES[rate_index], &beatmap_path_str);
-        
-        if args.pretty {
-            serde_json::to_string_pretty(&result)?
+        // Check if rate matches a predefined rate
+        if let Some(rate_index) = find_rate_index(rate) {
+            // Use predefined rate from AllRates
+            let result = convert_single_rate(&all_rates, rate_index, RATES[rate_index], &beatmap_path_str);
+            
+            if args.pretty {
+                serde_json::to_string_pretty(&result)?
+            } else {
+                serde_json::to_string(&result)?
+            }
         } else {
-            serde_json::to_string(&result)?
+            // Arbitrary rate - calculate using scaled note times
+            let scores = calc.calculate_msd_at_rate(args.beatmap_file.clone(), rate)?;
+            let dominant = get_dominant_skillset(&scores);
+            
+            let result = SingleRateMsdResult {
+                beatmap_path: beatmap_path_str.clone(),
+                minacalc_version: Calc::version(),
+                rate,
+                scores: scores.into(),
+                dominant_skillset: dominant,
+            };
+            
+            if args.pretty {
+                serde_json::to_string_pretty(&result)?
+            } else {
+                serde_json::to_string(&result)?
+            }
         }
     } else {
         // Full output with all rates

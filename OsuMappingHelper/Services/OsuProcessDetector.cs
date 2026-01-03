@@ -23,6 +23,9 @@ public class OsuProcessDetector : IDisposable
     // Memory reader for song selection
     private StructuredOsuMemoryReader? _memoryReader;
     
+    // Settings service for caching osu! directory
+    private UserSettingsService? _settingsService;
+    
     // Track recently modified files
     private readonly Dictionary<string, DateTime> _recentlyModified = new();
     private readonly TimeSpan _modificationWindow = TimeSpan.FromSeconds(5);
@@ -30,6 +33,31 @@ public class OsuProcessDetector : IDisposable
     public OsuProcessDetector()
     {
         _memoryReader = StructuredOsuMemoryReader.Instance;
+    }
+
+    /// <summary>
+    /// Sets the settings service for caching the osu! directory path.
+    /// </summary>
+    public void SetSettingsService(UserSettingsService settingsService)
+    {
+        _settingsService = settingsService;
+        
+        // Load cached directory if available
+        if (!string.IsNullOrEmpty(_settingsService.Settings.CachedOsuDirectory))
+        {
+            _osuDirectory = _settingsService.Settings.CachedOsuDirectory;
+            _songsFolder = Path.Combine(_osuDirectory, "Songs");
+            
+            if (Directory.Exists(_songsFolder))
+            {
+                Console.WriteLine($"[Detect] Using cached osu! directory: {_osuDirectory}");
+            }
+            else
+            {
+                Console.WriteLine($"[Detect] Cached Songs folder not found: {_songsFolder}");
+                _songsFolder = null;
+            }
+        }
     }
 
     /// <summary>
@@ -77,9 +105,20 @@ public class OsuProcessDetector : IDisposable
         _osuProcess = processes[0];
         Console.WriteLine($"[Detect] Attached to osu! process: PID {_osuProcess.Id}");
         
-        // Get osu! directory and Songs folder
-        _osuDirectory = GetOsuDirectory();
-        _songsFolder = GetSongsFolder();
+        // Get osu! directory and Songs folder from the running process
+        _osuDirectory = GetOsuDirectoryFromProcess();
+        _songsFolder = GetSongsFolderFromDirectory(_osuDirectory);
+        
+        // Cache the directory for when osu! is not running
+        if (_osuDirectory != null && _settingsService != null)
+        {
+            if (_settingsService.Settings.CachedOsuDirectory != _osuDirectory)
+            {
+                _settingsService.Settings.CachedOsuDirectory = _osuDirectory;
+                Task.Run(async () => await _settingsService.SaveAsync());
+                Console.WriteLine($"[Detect] Cached osu! directory: {_osuDirectory}");
+            }
+        }
         
         if (_songsFolder != null)
         {
@@ -483,9 +522,41 @@ public class OsuProcessDetector : IDisposable
     }
 
     /// <summary>
-    /// Gets the osu! installation directory from the running process.
+    /// Gets the osu! installation directory.
+    /// Returns the cached directory if osu! is not running.
     /// </summary>
     public string? GetOsuDirectory()
+    {
+        // If we have a cached directory, return it
+        if (!string.IsNullOrEmpty(_osuDirectory) && Directory.Exists(_osuDirectory))
+        {
+            return _osuDirectory;
+        }
+
+        // Try to get from running process
+        var fromProcess = GetOsuDirectoryFromProcess();
+        if (fromProcess != null)
+        {
+            _osuDirectory = fromProcess;
+            return fromProcess;
+        }
+
+        // Fallback: check common locations
+        var appData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        var defaultPath = Path.Combine(appData, "osu!");
+        if (Directory.Exists(defaultPath))
+        {
+            _osuDirectory = defaultPath;
+            return defaultPath;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Gets the osu! installation directory directly from the running process.
+    /// </summary>
+    private string? GetOsuDirectoryFromProcess()
     {
         if (_osuProcess == null) return null;
 
@@ -499,29 +570,42 @@ public class OsuProcessDetector : IDisposable
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[Detect] Error getting osu! directory: {ex.Message}");
+            Console.WriteLine($"[Detect] Error getting osu! directory from process: {ex.Message}");
         }
-
-        // Fallback: check common locations
-        var appData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        var defaultPath = Path.Combine(appData, "osu!");
-        if (Directory.Exists(defaultPath))
-            return defaultPath;
 
         return null;
     }
 
     /// <summary>
     /// Gets the Songs folder path for osu!.
+    /// Returns the cached Songs folder if osu! is not running.
     /// </summary>
     public string? GetSongsFolder()
     {
+        // If we have a cached songs folder, return it
+        if (!string.IsNullOrEmpty(_songsFolder) && Directory.Exists(_songsFolder))
+        {
+            return _songsFolder;
+        }
+
+        // Try to get from osu! directory
         var osuDir = GetOsuDirectory();
+        return GetSongsFolderFromDirectory(osuDir);
+    }
+
+    /// <summary>
+    /// Gets the Songs folder path from a given osu! directory.
+    /// </summary>
+    private string? GetSongsFolderFromDirectory(string? osuDir)
+    {
         if (osuDir == null) return null;
 
         var songsFolder = Path.Combine(osuDir, "Songs");
         if (Directory.Exists(songsFolder))
+        {
+            _songsFolder = songsFolder;
             return songsFolder;
+        }
 
         Console.WriteLine($"[Detect] Songs folder not found at: {songsFolder}");
         return null;

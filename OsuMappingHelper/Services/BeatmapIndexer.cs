@@ -10,8 +10,14 @@ namespace OsuMappingHelper.Services;
 public class BeatmapIndexer
 {
     /// <summary>
+    /// Tag added to session copies to identify them as Companella-generated files.
+    /// </summary>
+    public const string SessionTag = "companellasessiondonottouch";
+
+    /// <summary>
     /// Creates an indexed copy of a beatmap file.
-    /// The copy will have the Version field modified to include an index prefix.
+    /// The copy will have the Version field modified to include an index prefix,
+    /// and the Tags field will include the session marker tag.
     /// </summary>
     /// <param name="originalPath">Path to the original .osu file.</param>
     /// <param name="index">The index to prefix (will be formatted as #001, #002, etc.).</param>
@@ -38,6 +44,7 @@ public class BeatmapIndexer
             var modifiedLines = new List<string>();
             string? originalVersion = null;
             string? newVersion = null;
+            bool foundTags = false;
 
             // Process each line
             bool inMetadataSection = false;
@@ -48,6 +55,12 @@ public class BeatmapIndexer
                 // Track section
                 if (trimmed.StartsWith("[") && trimmed.EndsWith("]"))
                 {
+                    // If leaving Metadata section and haven't found Tags, add it
+                    if (inMetadataSection && !foundTags)
+                    {
+                        modifiedLines.Add($"Tags:{SessionTag}");
+                        foundTags = true;
+                    }
                     inMetadataSection = trimmed == "[Metadata]";
                     modifiedLines.Add(line);
                     continue;
@@ -59,6 +72,30 @@ public class BeatmapIndexer
                     originalVersion = trimmed.Substring("Version:".Length).Trim();
                     newVersion = $"#{index:D3} {originalVersion}";
                     modifiedLines.Add($"Version:{newVersion}");
+                    continue;
+                }
+
+                // Add session tag to Tags field in Metadata section
+                if (inMetadataSection && trimmed.StartsWith("Tags:"))
+                {
+                    var existingTags = trimmed.Substring("Tags:".Length).Trim();
+                    // Only add tag if not already present
+                    if (!existingTags.Contains(SessionTag))
+                    {
+                        if (string.IsNullOrWhiteSpace(existingTags))
+                        {
+                            modifiedLines.Add($"Tags:{SessionTag}");
+                        }
+                        else
+                        {
+                            modifiedLines.Add($"Tags:{existingTags} {SessionTag}");
+                        }
+                    }
+                    else
+                    {
+                        modifiedLines.Add(line);
+                    }
+                    foundTags = true;
                     continue;
                 }
 

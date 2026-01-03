@@ -50,6 +50,7 @@ public partial class MainScreen : osu.Framework.Screens.Screen
     private FunctionButtonPanel _functionPanel = null!;
     private OffsetInputPanel _offsetPanel = null!;
     private BulkRateChangerPanel _bulkRateChangerPanel = null!;
+    private MarathonCreatorPanel _marathonCreatorPanel = null!;
     
     // Footer components
     private StatusDisplay _statusDisplay = null!;
@@ -285,6 +286,23 @@ public partial class MainScreen : osu.Framework.Screens.Screen
         _functionPanel = new FunctionButtonPanel();
         _offsetPanel = new OffsetInputPanel();
         _bulkRateChangerPanel = new BulkRateChangerPanel();
+        _marathonCreatorPanel = new MarathonCreatorPanel();
+
+        // Wire up marathon creator events
+        _marathonCreatorPanel.CreateMarathonRequested += OnCreateMarathonRequested;
+        _marathonCreatorPanel.RecalculateMsdRequested += OnRecalculateMsdRequested;
+        _marathonCreatorPanel.LoadingStarted += status =>
+        {
+            Schedule(() => _loadingOverlay.Show(status));
+        };
+        _marathonCreatorPanel.LoadingStatusChanged += status =>
+        {
+            Schedule(() => _loadingOverlay.UpdateStatus(status));
+        };
+        _marathonCreatorPanel.LoadingFinished += () =>
+        {
+            Schedule(() => _loadingOverlay.Hide());
+        };
 
         // Combine BPM Analysis and Normalize SV into one panel
         var timingToolsContent = new FillFlowContainer
@@ -303,8 +321,8 @@ public partial class MainScreen : osu.Framework.Screens.Screen
         var splitContainer = new SplitTabContainer(new[]
         {
             new SplitTabItem("Timing Tools", timingToolsContent),
-            new SplitTabItem("Bulk Rates", _bulkRateChangerPanel)
-            // Future mapping features can be added here
+            new SplitTabItem("Bulk Rates", _bulkRateChangerPanel),
+            new SplitTabItem("Marathon", _marathonCreatorPanel)
         })
         {
             RelativeSizeAxes = Axes.Both
@@ -343,6 +361,11 @@ public partial class MainScreen : osu.Framework.Screens.Screen
                         },
                         // Session auto-start settings
                         new SessionAutoStartPanel
+                        {
+                            RelativeSizeAxes = Axes.X
+                        },
+                        // Score migration from session copies
+                        new ScoreMigrationPanel
                         {
                             RelativeSizeAxes = Axes.X
                         },
@@ -475,6 +498,8 @@ public partial class MainScreen : osu.Framework.Screens.Screen
             _offsetPanel.SetEnabled(true);
             _rateChangerPanel.SetEnabled(true);
             _bulkRateChangerPanel.SetEnabled(true);
+            _marathonCreatorPanel.SetCurrentBeatmap(_currentOsuFile);
+            _marathonCreatorPanel.SetEnabled(true);
             _statusDisplay.SetStatus($"Loaded: {_currentOsuFile.DisplayName}", StatusType.Success);
             
             // Get dominant BPM and pass to rate changer panel
@@ -491,6 +516,8 @@ public partial class MainScreen : osu.Framework.Screens.Screen
             _offsetPanel.SetEnabled(false);
             _rateChangerPanel.SetEnabled(false);
             _bulkRateChangerPanel.SetEnabled(false);
+            _marathonCreatorPanel.SetCurrentBeatmap(null);
+            _marathonCreatorPanel.SetEnabled(false);
         }
     }
 
@@ -926,12 +953,152 @@ public partial class MainScreen : osu.Framework.Screens.Screen
         }
     }
 
+    private async void OnCreateMarathonRequested(List<MarathonEntry> entries, MarathonMetadata metadata)
+    {
+        if (entries.Count == 0)
+        {
+            _statusDisplay.SetStatus("No maps in marathon list.", StatusType.Error);
+            return;
+        }
+
+        var marathonService = new MarathonCreatorService();
+        _loadingOverlay.Show("Checking ffmpeg...");
+
+        var ffmpegAvailable = await marathonService.CheckFfmpegAvailableAsync();
+        if (!ffmpegAvailable)
+        {
+            _loadingOverlay.Hide();
+            _statusDisplay.SetStatus("ffmpeg not found! Please install ffmpeg and add it to PATH.", StatusType.Error);
+            return;
+        }
+
+        // Use the osu! Songs folder as output directory
+        var outputDir = ProcessDetector.GetSongsFolder();
+        if (string.IsNullOrEmpty(outputDir) || !Directory.Exists(outputDir))
+        {
+            _loadingOverlay.Hide();
+            _statusDisplay.SetStatus("osu! Songs directory not found. Please connect to osu! first.", StatusType.Error);
+            return;
+        }
+
+        _loadingOverlay.Show($"Creating marathon from {entries.Count} maps...");
+        SetAllPanelsEnabled(false);
+
+        try
+        {
+            var result = await marathonService.CreateMarathonAsync(
+                entries,
+                metadata,
+                outputDir,
+                status => Schedule(() =>
+                {
+                    _loadingOverlay.UpdateStatus(status);
+                    _statusDisplay.SetStatus(status, StatusType.Info);
+                }));
+
+            Schedule(() =>
+            {
+                if (result.Success && result.OutputPath != null)
+                {
+                    var duration = TimeSpan.FromMilliseconds(result.TotalDurationMs);
+                    _statusDisplay.SetStatus(
+                        $"Marathon created! {(int)duration.TotalMinutes}:{duration.Seconds:D2} total. Press F5 in osu! to refresh.",
+                        StatusType.Success);
+                    LoadBeatmap(result.OutputPath);
+
+                    // Track analytics
+                    var mapCount = entries.Count(e => !e.IsPause);
+                    var pauseCount = entries.Count(e => e.IsPause);
+                    AptabaseService.TrackMarathonCreated(mapCount, pauseCount, duration.TotalMinutes);
+                }
+                else
+                {
+                    _statusDisplay.SetStatus($"Marathon creation failed: {result.ErrorMessage}", StatusType.Error);
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            Schedule(() => _statusDisplay.SetStatus($"Marathon creation failed: {ex.Message}", StatusType.Error));
+        }
+        finally
+        {
+            Schedule(() =>
+            {
+                _loadingOverlay.Hide();
+                SetAllPanelsEnabled(true);
+            });
+        }
+    }
+
+    private async void OnRecalculateMsdRequested(List<MarathonEntry> entries)
+    {
+        // Filter out pause entries - they don't have MSD
+        var mapEntries = entries.Where(e => !e.IsPause).ToList();
+        
+        if (mapEntries.Count == 0)
+        {
+            _statusDisplay.SetStatus("No maps in marathon list (only pauses).", StatusType.Error);
+            return;
+        }
+
+        if (!ToolPaths.MsdCalculatorExists)
+        {
+            _statusDisplay.SetStatus("msd-calculator not found! Cannot calculate MSD.", StatusType.Error);
+            return;
+        }
+
+        _loadingOverlay.Show($"Calculating MSD for {mapEntries.Count} maps...");
+        SetAllPanelsEnabled(false);
+
+        try
+        {
+            var analyzer = new MsdAnalyzer(ToolPaths.MsdCalculator);
+
+            for (int i = 0; i < mapEntries.Count; i++)
+            {
+                var entry = mapEntries[i];
+                Schedule(() => _loadingOverlay.UpdateStatus($"Calculating MSD for [{entry.Version}] ({i + 1}/{mapEntries.Count})..."));
+
+                try
+                {
+                    var result = await analyzer.AnalyzeSingleRateAsync(entry.OsuFile!.FilePath, (float)entry.Rate);
+                    entry.MsdValues = result?.Scores;
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[MSD] Failed to calculate MSD for {entry.Title}: {ex.Message}");
+                    entry.MsdValues = null;
+                }
+            }
+
+            Schedule(() =>
+            {
+                _marathonCreatorPanel.RefreshList();
+                _statusDisplay.SetStatus($"MSD calculated for {mapEntries.Count} maps.", StatusType.Success);
+            });
+        }
+        catch (Exception ex)
+        {
+            Schedule(() => _statusDisplay.SetStatus($"MSD calculation failed: {ex.Message}", StatusType.Error));
+        }
+        finally
+        {
+            Schedule(() =>
+            {
+                _loadingOverlay.Hide();
+                SetAllPanelsEnabled(true);
+            });
+        }
+    }
+
     private void SetAllPanelsEnabled(bool enabled)
     {
         _functionPanel.SetEnabled(enabled);
         _offsetPanel.SetEnabled(enabled);
         _rateChangerPanel.SetEnabled(enabled);
         _bulkRateChangerPanel.SetEnabled(enabled);
+        _marathonCreatorPanel.SetEnabled(enabled);
     }
 
     protected override void Update()

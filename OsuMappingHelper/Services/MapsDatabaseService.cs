@@ -15,6 +15,7 @@ public class MapsDatabaseService : IDisposable
     private readonly string _connectionString;
     private readonly MsdAnalyzer? _msdAnalyzer;
     private readonly OsuFileParser _fileParser;
+    private BeatmapApiService? _beatmapApiService;
     private bool _isDisposed;
 
     private CancellationTokenSource? _indexingCts;
@@ -27,6 +28,7 @@ public class MapsDatabaseService : IDisposable
     private readonly ConcurrentQueue<IndexedMap> _pendingWrites = new();
     private readonly object _batchWriteLock = new();
     private const int BatchWriteSize = 50;
+
 
     /// <summary>
     /// Event raised when indexing progress changes.
@@ -42,6 +44,14 @@ public class MapsDatabaseService : IDisposable
     /// Whether indexing is currently in progress.
     /// </summary>
     public bool IsIndexing => _isIndexing;
+
+    /// <summary>
+    /// Sets the BeatmapApiService for uploading maps to the server during indexing.
+    /// </summary>
+    public void SetBeatmapApiService(BeatmapApiService? apiService)
+    {
+        _beatmapApiService = apiService;
+    }
 
     /// <summary>
     /// Creates a new MapsDatabaseService.
@@ -738,6 +748,17 @@ public class MapsDatabaseService : IDisposable
                             Chordjack = rate.Scores.Chordjack,
                             Technical = rate.Scores.Technical
                         });
+                    }
+
+                    // Fire and forget server upload if API is configured
+                    // Skip session copies (they have the companellasessiondonottouch tag)
+                    if (_beatmapApiService != null && _beatmapApiService.IsEnabled)
+                    {
+                        var isSessionCopy = osuFile.Tags.Contains(BeatmapIndexer.SessionTag, StringComparison.OrdinalIgnoreCase);
+                        if (!isSessionCopy)
+                        {
+                            _ = _beatmapApiService.UploadBeatmapAsync(beatmapPath, cancellationToken);
+                        }
                     }
                 }
                 catch (Exception ex)

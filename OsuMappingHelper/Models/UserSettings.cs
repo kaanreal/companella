@@ -92,4 +92,24 @@ public class UserSettings
     /// </summary>
     [JsonPropertyName("sendAnalytics")]
     public bool SendAnalytics { get; set; } = true;
+
+    /// <summary>
+    /// URL of the beatmap API server for uploading maps during indexing.
+    /// Set to empty string to disable server uploads.
+    /// </summary>
+    [JsonPropertyName("beatmapApiUrl")]
+    public string BeatmapApiUrl { get; set; } = "http://localhost:3000";
+
+    /// <summary>
+    /// Whether to upload beatmaps to the server during indexing.
+    /// </summary>
+    [JsonPropertyName("uploadBeatmapsToServer")]
+    public bool UploadBeatmapsToServer { get; set; } = false;
+
+    /// <summary>
+    /// Cached osu! installation directory path.
+    /// Used when osu! is not running to still access files.
+    /// </summary>
+    [JsonPropertyName("cachedOsuDirectory")]
+    public string? CachedOsuDirectory { get; set; }
 }

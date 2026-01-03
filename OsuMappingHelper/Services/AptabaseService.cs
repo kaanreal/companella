@@ -343,5 +343,21 @@ public class AptabaseService : IDisposable
         });
     }
 
+    /// <summary>
+    /// Tracks marathon creation.
+    /// </summary>
+    /// <param name="mapCount">Number of maps in the marathon.</param>
+    /// <param name="pauseCount">Number of pause sections.</param>
+    /// <param name="totalDurationMinutes">Total duration in minutes.</param>
+    public void TrackMarathonCreated(int mapCount, int pauseCount, double totalDurationMinutes)
+    {
+        TrackEvent("marathon_created", new Dictionary<string, object>
+        {
+            ["map_count"] = mapCount,
+            ["pause_count"] = pauseCount,
+            ["duration_minutes"] = Math.Round(totalDurationMinutes, 1)
+        });
+    }
+
     #endregion
 }

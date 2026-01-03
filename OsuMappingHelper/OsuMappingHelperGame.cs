@@ -53,6 +53,8 @@ public partial class OsuMappingHelperGame : Game
     private MapMmrCalculator _mapMmrCalculator = null!;
     private MapRecommendationService _mapRecommendationService = null!;
     private OsuCollectionService _collectionService = null!;
+    private BeatmapApiService _beatmapApiService = null!;
+    private ScoreMigrationService _scoreMigrationService = null!;
     
     // Tray icon
     private TrayIconService _trayIconService = null!;
@@ -90,6 +92,9 @@ public partial class OsuMappingHelperGame : Game
         _danConfigService = new DanConfigurationService();
         _trainingDataService = new TrainingDataService();
         _userSettingsService = new UserSettingsService();
+        
+        // Connect settings service to process detector for caching osu! directory
+        _processDetector.SetSettingsService(_userSettingsService);
         _overlayService = new OsuWindowOverlayService();
         _hotkeyService = new GlobalHotkeyService();
         _autoUpdaterService = new AutoUpdaterService();
@@ -98,6 +103,9 @@ public partial class OsuMappingHelperGame : Game
         
         // Skills analysis services
         _mapsDatabaseService = new MapsDatabaseService();
+        _beatmapApiService = new BeatmapApiService(_userSettingsService);
+        _mapsDatabaseService.SetBeatmapApiService(_beatmapApiService);
+        _scoreMigrationService = new ScoreMigrationService(_processDetector, _fileParser);
         _skillsTrendAnalyzer = new SkillsTrendAnalyzer(_sessionDatabaseService);
         _mapMmrCalculator = new MapMmrCalculator(_mapsDatabaseService);
         _mapRecommendationService = new MapRecommendationService(_mapsDatabaseService, _mapMmrCalculator, _skillsTrendAnalyzer);
@@ -124,6 +132,8 @@ public partial class OsuMappingHelperGame : Game
         _dependencies.CacheAs(_mapMmrCalculator);
         _dependencies.CacheAs(_mapRecommendationService);
         _dependencies.CacheAs(_collectionService);
+        _dependencies.CacheAs(_beatmapApiService);
+        _dependencies.CacheAs(_scoreMigrationService);
         _dependencies.CacheAs(_trayIconService);
         _dependencies.CacheAs(_aptabaseService);
 

@@ -37,7 +37,7 @@ Arguments:
 
 Options:
   -o, --output <OUTPUT>  Output file path (optional, prints to stdout if not specified)
-  -r, --rate <RATE>      Only output scores for a specific rate (e.g., 1.0)
+  -r, --rate <RATE>      Only output scores for a specific rate (any value > 0, e.g., 1.0, 1.25, 0.85)
   -p, --pretty           Pretty print JSON output
   -h, --help             Print help
   -V, --version          Print version
@@ -53,6 +53,11 @@ msd-calculator -p "beatmap.osu"
 Get only 1.0x rate scores:
 ```bash
 msd-calculator --rate 1.0 "beatmap.osu"
+```
+
+Get scores for an arbitrary rate (e.g., 1.25x):
+```bash
+msd-calculator --rate 1.25 "beatmap.osu"
 ```
 
 Save to file:
@@ -121,10 +126,12 @@ msd-calculator -o result.json "beatmap.osu"
 - **chordjack**: Chord jack patterns
 - **technical**: Technical complexity
 
-## Supported Rates
+## Rate Support
 
-The tool calculates difficulty for 14 music rates:
-0.7x, 0.8x, 0.9x, 1.0x, 1.1x, 1.2x, 1.3x, 1.4x, 1.5x, 1.6x, 1.7x, 1.8x, 1.9x, 2.0x
+- **Without `--rate` flag**: Returns MSD for predefined rates (0.7x to 2.0x in 0.1 increments)
+- **With `--rate` flag**: Supports ANY rate > 0 (e.g., 0.85, 1.25, 1.05, 3.0)
+  - Predefined rates (0.7, 0.8, ..., 2.0) use cached calculations for speed
+  - Arbitrary rates calculate MSD by scaling note timing
 
 ## Limitations
 
