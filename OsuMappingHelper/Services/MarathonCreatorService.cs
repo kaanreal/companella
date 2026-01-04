@@ -51,6 +51,17 @@ public class MarathonCreationResult
 }
 
 /// <summary>
+/// Information about highlight images generated for storyboard.
+/// </summary>
+internal class HighlightInfo
+{
+    /// <summary>
+    /// Maps MarathonEntry ID to the highlight image filename.
+    /// </summary>
+    public Dictionary<Guid, string> EntryToHighlightFile { get; set; } = new();
+}
+
+/// <summary>
 /// Pre-calculated fade information for an entry.
 /// </summary>
 internal class EntryFadeInfo
@@ -284,9 +295,17 @@ public class MarathonCreatorService
                 progressCallback?.Invoke("Normalizing scroll velocity...");
                 NormalizeSV(finalOsuPath);
 
-                // Step 5: Generate composite background
+                // Step 5: Generate composite background and highlight images
                 progressCallback?.Invoke("Generating marathon background...");
-                await GenerateMarathonBackgroundAsync(entries, metadata, outputFolder, cancellationToken);
+                var highlightInfo = await GenerateMarathonBackgroundAsync(entries, metadata, outputFolder, cancellationToken);
+
+                // Step 6: Inject storyboard events into the .osu file
+                progressCallback?.Invoke("Adding storyboard to beatmap...");
+                InjectStoryboardIntoOsuFile(finalOsuPath, processedSegments, highlightInfo);
+
+                // Step 7: Generate marathon structure documentation
+                progressCallback?.Invoke("Generating structure documentation...");
+                GenerateStructureDocument(processedSegments, metadata, outputFolder);
 
                 // Cleanup temp directory
                 try
@@ -1354,20 +1373,23 @@ public class MarathonCreatorService
     /// <summary>
     /// Generates a composite background image from all map backgrounds.
     /// Each map's background is displayed as a shard arranged radially with rounded edges.
+    /// Also generates highlight images for each shard for storyboard use.
     /// </summary>
-    private async Task GenerateMarathonBackgroundAsync(
+    private async Task<HighlightInfo> GenerateMarathonBackgroundAsync(
         List<MarathonEntry> entries,
         MarathonMetadata metadata,
         string outputFolder,
         CancellationToken cancellationToken)
     {
+        var highlightInfo = new HighlightInfo();
+        
         // Filter to only map entries (skip pauses)
         var mapEntries = entries.Where(e => !e.IsPause && e.OsuFile != null).ToList();
 
         if (mapEntries.Count == 0)
         {
             Console.WriteLine("[Marathon] No map entries for background generation");
-            return;
+            return highlightInfo;
         }
 
         var outputPath = IOPath.Combine(outputFolder, "background.jpg");
@@ -1376,10 +1398,10 @@ public class MarathonCreatorService
         try
         {
             // Create the output canvas
-            using var outputImage = new Image<Rgba32>(BgWidth, BgHeight);
+            using var baseImage = new Image<Rgba32>(BgWidth, BgHeight);
             
             // Fill with black background
-            outputImage.Mutate(ctx => ctx.Fill(SixLabors.ImageSharp.Color.Black));
+            baseImage.Mutate(ctx => ctx.Fill(SixLabors.ImageSharp.Color.Black));
 
             // Calculate angle per shard
             float anglePerShard = 360f / mapEntries.Count;
@@ -1388,6 +1410,7 @@ public class MarathonCreatorService
 
             // Collect shard paths for border drawing later
             var shardPaths = new List<IPath>();
+            var entryShardPaths = new List<(MarathonEntry Entry, IPath Path)>();
 
             for (int i = 0; i < mapEntries.Count; i++)
             {
@@ -1405,35 +1428,345 @@ public class MarathonCreatorService
                 // Build the shard path with rounded edges (both inner and outer)
                 var shardPath = BuildShardPath(shardStartAngle, shardEndAngle);
                 shardPaths.Add(shardPath);
+                entryShardPaths.Add((entry, shardPath));
 
                 // Calculate the center of the shard for image offset
                 var shardCenter = CalculateShardCenter(shardStartAngle, shardEndAngle);
 
                 // Draw the shard onto the output with proper centering
-                DrawShardOntoCanvas(outputImage, shardImage, shardPath, shardCenter);
+                DrawShardOntoCanvas(baseImage, shardImage, shardPath, shardCenter);
             }
 
             // Draw black borders on all shard edges
-            DrawShardBorders(outputImage, shardPaths);
+            DrawShardBorders(baseImage, shardPaths);
 
             // Draw center circle with text
-            DrawCenterCircle(outputImage, metadata.CenterText);
+            DrawCenterCircle(baseImage, metadata.CenterText);
 
-            // Apply glitch effects after everything is drawn
+            // Generate a random seed for glitch effects (so all images get identical glitch)
+            int glitchSeed = new Random().Next();
+            Console.WriteLine($"[Marathon] Using glitch seed: {glitchSeed}");
+
+            // Generate highlighted versions for each map (with highlight baked in)
+            // Each version has one shard highlighted, then ALL get the same glitch effect
+            Console.WriteLine($"[Marathon] Generating {mapEntries.Count} highlighted versions...");
+            
+            var imagesToGlitch = new List<(Image<Rgba32> Image, string Path, Guid? EntryId)>();
+            
+            // Add the base background
+            var baseClone = baseImage.Clone();
+            imagesToGlitch.Add((baseClone, outputPath, null));
+            
+            // Create highlighted versions for each shard
+            for (int i = 0; i < entryShardPaths.Count; i++)
+            {
+                var (entry, shardPath) = entryShardPaths[i];
+                var highlightFilename = $"highlight_{i}.jpg";
+                var highlightPath = IOPath.Combine(outputFolder, highlightFilename);
+                
+                // Clone the base image and add highlight to the specific shard
+                var highlightedImage = baseImage.Clone();
+                AddHighlightToShard(highlightedImage, shardPath);
+                
+                imagesToGlitch.Add((highlightedImage, highlightPath, entry.Id));
+                highlightInfo.EntryToHighlightFile[entry.Id] = highlightFilename;
+            }
+            
+            // Apply glitch effects to ALL images using the same seed
             if (metadata.GlitchIntensity > 0)
             {
-                ApplyGlitchEffects(outputImage, metadata.GlitchIntensity);
+                Console.WriteLine($"[Marathon] Applying glitch effects to {imagesToGlitch.Count} images...");
+                foreach (var (image, path, _) in imagesToGlitch)
+                {
+                    ApplyGlitchEffects(image, metadata.GlitchIntensity, glitchSeed);
+                }
             }
-
-            // Save the composite image
-            await outputImage.SaveAsJpegAsync(outputPath, cancellationToken);
-            Console.WriteLine($"[Marathon] Background saved: {outputPath}");
+            
+            // Save all images
+            foreach (var (image, path, _) in imagesToGlitch)
+            {
+                await image.SaveAsJpegAsync(path, cancellationToken);
+                image.Dispose();
+            }
+            
+            Console.WriteLine($"[Marathon] All background images saved");
         }
         catch (Exception ex)
         {
             Console.WriteLine($"[Marathon] Background generation failed: {ex.Message}");
             // Don't fail the marathon creation if background generation fails
         }
+
+        return highlightInfo;
+    }
+
+    /// <summary>
+    /// Adds a white highlight overlay to a specific shard on the image.
+    /// </summary>
+    private void AddHighlightToShard(Image<Rgba32> image, IPath shardPath)
+    {
+        // Draw white semi-transparent fill for the shard
+        var highlightColor = new Rgba32(255, 255, 255, 80); // White with ~30% opacity
+        image.Mutate(ctx => ctx.Fill(highlightColor, shardPath));
+        
+        // Add a white border for extra visibility
+        var borderPen = SixLabors.ImageSharp.Drawing.Processing.Pens.Solid(
+            new Rgba32(255, 255, 255, 200), 4f);
+        image.Mutate(ctx => ctx.Draw(borderPen, shardPath));
+    }
+
+    /// <summary>
+    /// Injects storyboard events directly into the .osu file's Events section.
+    /// This ensures osu! recognizes the storyboard without needing a separate .osb file.
+    /// </summary>
+    private void InjectStoryboardIntoOsuFile(
+        string osuFilePath,
+        List<ProcessedMapSegment> segments,
+        HighlightInfo highlightInfo)
+    {
+        if (highlightInfo.EntryToHighlightFile.Count == 0)
+        {
+            Console.WriteLine("[Marathon] No highlight info available, skipping storyboard injection");
+            return;
+        }
+
+        // Read the existing .osu file
+        var lines = File.ReadAllLines(osuFilePath).ToList();
+        
+        // Find the storyboard layer comments and inject our sprites
+        int insertIndex = -1;
+        for (int i = 0; i < lines.Count; i++)
+        {
+            if (lines[i].Contains("//Storyboard Layer 0 (Background)"))
+            {
+                insertIndex = i + 1;
+                break;
+            }
+        }
+
+        if (insertIndex == -1)
+        {
+            Console.WriteLine("[Marathon] Could not find storyboard section in .osu file");
+            return;
+        }
+
+        // Build storyboard sprite commands
+        var storyboardLines = new List<string>();
+        
+        // Fade duration for smooth transitions (in ms)
+        const int fadeDuration = 200;
+
+        // Process each segment and create sprite swap commands
+        foreach (var segment in segments)
+        {
+            // Skip pause entries
+            if (segment.Entry.IsPause)
+                continue;
+
+            // Check if we have a highlight for this entry
+            if (!highlightInfo.EntryToHighlightFile.TryGetValue(segment.Entry.Id, out var highlightFilename))
+                continue;
+
+            // Calculate timing
+            var startTime = (int)segment.OffsetInMarathon;
+            var endTime = (int)(segment.OffsetInMarathon + segment.Duration);
+            
+            // Fade in starts slightly before the section, fade out ends slightly after
+            var fadeInStart = Math.Max(0, startTime - fadeDuration);
+            var fadeOutEnd = endTime + fadeDuration;
+
+            // Sprite declaration for full background image
+            // Layer: Background (behind gameplay elements)
+            // Origin: Centre
+            // Position: Center of osu! playfield (320, 240)
+            storyboardLines.Add($"Sprite,Background,Centre,\"{highlightFilename}\",320,240");
+            
+            // Scale command to fill the screen
+            // osu! storyboard uses 640x480 as base, our images are 1920x1080
+            // Scale of ~0.45 will make the image cover the playfield area
+            storyboardLines.Add($" S,0,0,,0.45");
+            
+            // Fade commands: F,easing,starttime,endtime,startopacity,endopacity
+            // Fade in
+            storyboardLines.Add($" F,0,{fadeInStart},{startTime},0,1");
+            // Stay visible
+            storyboardLines.Add($" F,0,{startTime},{endTime},1");
+            // Fade out
+            storyboardLines.Add($" F,0,{endTime},{fadeOutEnd},1,0");
+        }
+
+        // Insert storyboard lines into the file
+        lines.InsertRange(insertIndex, storyboardLines);
+
+        // Write back the modified file
+        File.WriteAllLines(osuFilePath, lines);
+        Console.WriteLine($"[Marathon] Storyboard injected into .osu file ({storyboardLines.Count} lines)");
+    }
+
+    /// <summary>
+    /// Generates a text file documenting the marathon structure with all maps and breaks.
+    /// </summary>
+    private void GenerateStructureDocument(
+        List<ProcessedMapSegment> segments,
+        MarathonMetadata metadata,
+        string outputFolder)
+    {
+        var docPath = IOPath.Combine(outputFolder, "marathon_structure.txt");
+        var sb = new StringBuilder();
+
+        // Header
+        sb.AppendLine("================================================================================");
+        sb.AppendLine("                           MARATHON STRUCTURE");
+        sb.AppendLine("================================================================================");
+        sb.AppendLine();
+        sb.AppendLine($"Title:    {metadata.Artist} - {metadata.Title}");
+        sb.AppendLine($"Creator:  {metadata.Creator}");
+        sb.AppendLine($"Version:  {metadata.Version}");
+        sb.AppendLine();
+
+        // Calculate totals
+        var totalDuration = segments.Sum(s => s.Duration);
+        var mapCount = segments.Count(s => !s.Entry.IsPause);
+        var breakCount = segments.Count(s => s.Entry.IsPause);
+        var totalBreakTime = segments.Where(s => s.Entry.IsPause).Sum(s => s.Duration);
+
+        sb.AppendLine($"Total Maps:       {mapCount}");
+        sb.AppendLine($"Total Breaks:     {breakCount}");
+        sb.AppendLine($"Total Duration:   {FormatDuration(totalDuration)}");
+        sb.AppendLine($"Total Break Time: {FormatDuration(totalBreakTime)}");
+        sb.AppendLine();
+        sb.AppendLine("================================================================================");
+        sb.AppendLine("                              TRACK LIST");
+        sb.AppendLine("================================================================================");
+        sb.AppendLine();
+
+        // Table header
+        sb.AppendLine(new string('-', 120));
+        sb.AppendLine($"{"#",-4} {"Type",-8} {"Start",-10} {"Duration",-10} {"Rate",-6} {"Title",-40} {"Difficulty",-20}");
+        sb.AppendLine(new string('-', 120));
+
+        int trackNum = 1;
+        foreach (var segment in segments)
+        {
+            var startTime = FormatDuration(segment.OffsetInMarathon);
+            var duration = FormatDuration(segment.Duration);
+
+            if (segment.Entry.IsPause)
+            {
+                sb.AppendLine($"{trackNum,-4} {"BREAK",-8} {startTime,-10} {duration,-10} {"-",-6} {"--- Break ---",-40} {"-",-20}");
+            }
+            else
+            {
+                var entry = segment.Entry;
+                var rate = entry.Rate.ToString("0.00") + "x";
+                var title = TruncateString(entry.Title, 38);
+                var difficulty = TruncateString(entry.Version, 18);
+
+                sb.AppendLine($"{trackNum,-4} {"MAP",-8} {startTime,-10} {duration,-10} {rate,-6} {title,-40} {difficulty,-20}");
+            }
+            trackNum++;
+        }
+
+        sb.AppendLine(new string('-', 120));
+        sb.AppendLine();
+        sb.AppendLine("================================================================================");
+        sb.AppendLine("                           DETAILED MAP INFO");
+        sb.AppendLine("================================================================================");
+        sb.AppendLine();
+
+        trackNum = 1;
+        foreach (var segment in segments)
+        {
+            if (segment.Entry.IsPause)
+            {
+                sb.AppendLine($"[{trackNum}] BREAK");
+                sb.AppendLine($"    Duration: {FormatDuration(segment.Duration)} ({segment.Duration:F0}ms)");
+                sb.AppendLine();
+            }
+            else
+            {
+                var entry = segment.Entry;
+                var osuFile = entry.OsuFile;
+
+                sb.AppendLine($"[{trackNum}] {entry.Title}");
+                sb.AppendLine($"    Artist:     {osuFile?.Artist ?? "Unknown"}");
+                sb.AppendLine($"    Creator:    {entry.Creator}");
+                sb.AppendLine($"    Difficulty: {entry.Version}");
+                sb.AppendLine($"    Rate:       {entry.Rate:0.00}x");
+                sb.AppendLine($"    BPM:        {entry.Bpm:F1} (original: {entry.DominantBpm:F1})");
+                sb.AppendLine($"    Duration:   {FormatDuration(segment.Duration)} ({segment.Duration:F0}ms)");
+                sb.AppendLine($"    Start:      {FormatDuration(segment.OffsetInMarathon)}");
+                
+                // Generate relative path from Songs folder
+                if (osuFile?.FilePath != null)
+                {
+                    var relativePath = GetRelativePathFromSongs(osuFile.FilePath);
+                    sb.AppendLine($"    Path:       {relativePath}");
+                }
+                
+                // MSD info if available
+                if (entry.MsdValues != null)
+                {
+                    var msd = entry.MsdValues;
+                    sb.AppendLine($"    MSD:        Overall={msd.Overall:F1}, Stream={msd.Stream:F1}, JS={msd.Jumpstream:F1}, HS={msd.Handstream:F1}");
+                    sb.AppendLine($"                Stamina={msd.Stamina:F1}, Jack={msd.Jackspeed:F1}, CJ={msd.Chordjack:F1}, Tech={msd.Technical:F1}");
+                }
+                
+                sb.AppendLine();
+            }
+            trackNum++;
+        }
+
+        sb.AppendLine("================================================================================");
+        sb.AppendLine($"Generated by Companella Marathon Creator");
+        sb.AppendLine($"Date: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
+        sb.AppendLine("================================================================================");
+
+        File.WriteAllText(docPath, sb.ToString());
+        Console.WriteLine($"[Marathon] Structure document saved: {docPath}");
+    }
+
+    /// <summary>
+    /// Formats a duration in milliseconds to a readable string (mm:ss or hh:mm:ss).
+    /// </summary>
+    private static string FormatDuration(double milliseconds)
+    {
+        var timeSpan = TimeSpan.FromMilliseconds(milliseconds);
+        if (timeSpan.TotalHours >= 1)
+        {
+            return $"{(int)timeSpan.TotalHours}:{timeSpan.Minutes:D2}:{timeSpan.Seconds:D2}";
+        }
+        return $"{(int)timeSpan.TotalMinutes}:{timeSpan.Seconds:D2}";
+    }
+
+    /// <summary>
+    /// Truncates a string to the specified length, adding "..." if truncated.
+    /// </summary>
+    private static string TruncateString(string str, int maxLength)
+    {
+        if (string.IsNullOrEmpty(str)) return str;
+        if (str.Length <= maxLength) return str;
+        return str.Substring(0, maxLength - 3) + "...";
+    }
+
+    /// <summary>
+    /// Gets a relative path from the osu! Songs folder.
+    /// </summary>
+    private static string GetRelativePathFromSongs(string filePath)
+    {
+        // Try to find "Songs" in the path and return everything after it
+        var normalizedPath = filePath.Replace('/', '\\');
+        var songsIndex = normalizedPath.IndexOf("\\Songs\\", StringComparison.OrdinalIgnoreCase);
+        if (songsIndex >= 0)
+        {
+            return normalizedPath.Substring(songsIndex + 7); // +7 to skip "\Songs\"
+        }
+        
+        // Fallback: just return the filename and parent folder
+        var directory = IOPath.GetDirectoryName(filePath);
+        var folderName = IOPath.GetFileName(directory);
+        var fileName = IOPath.GetFileName(filePath);
+        return IOPath.Combine(folderName ?? "", fileName);
     }
 
     /// <summary>
@@ -1708,27 +2041,29 @@ public class MarathonCreatorService
 
     #region Glitch Effects
 
-    private static readonly Random GlitchRandom = new Random();
-
     /// <summary>
-    /// Applies glitch effects to the image based on intensity.
+    /// Applies glitch effects to the image based on intensity using a seeded random.
+    /// Using the same seed produces identical glitch patterns.
     /// Effects include: RGB shift, scanlines, image distortion, and block glitches.
     /// </summary>
-    private void ApplyGlitchEffects(Image<Rgba32> image, float intensity)
+    private void ApplyGlitchEffects(Image<Rgba32> image, float intensity, int seed)
     {
-        Console.WriteLine($"[Marathon] Applying glitch effects at {intensity:P0} intensity");
+        Console.WriteLine($"[Marathon] Applying glitch effects at {intensity:P0} intensity (seed: {seed})");
+        
+        // Create a seeded random for reproducible effects
+        var random = new Random(seed);
         
         // Apply effects in order with intensity scaling
-        ApplyRgbShift(image, intensity);
+        ApplyRgbShift(image, intensity, random);
         ApplyScanlines(image, intensity);
-        ApplyImageDistortion(image, intensity);
-        ApplyBlockGlitches(image, intensity);
+        ApplyImageDistortion(image, intensity, random);
+        ApplyBlockGlitches(image, intensity, random);
     }
 
     /// <summary>
     /// Applies chromatic aberration / RGB channel separation effect.
     /// </summary>
-    private void ApplyRgbShift(Image<Rgba32> image, float intensity)
+    private void ApplyRgbShift(Image<Rgba32> image, float intensity, Random random)
     {
         // Max shift scales with intensity (0-30 pixels at max)
         int maxShift = (int)(30 * intensity);
@@ -1739,10 +2074,10 @@ public class MarathonCreatorService
         using var blueChannel = image.Clone();
 
         // Random shift directions
-        int redShiftX = GlitchRandom.Next(-maxShift, maxShift + 1);
-        int redShiftY = GlitchRandom.Next(-maxShift / 3, maxShift / 3 + 1);
-        int blueShiftX = GlitchRandom.Next(-maxShift, maxShift + 1);
-        int blueShiftY = GlitchRandom.Next(-maxShift / 3, maxShift / 3 + 1);
+        int redShiftX = random.Next(-maxShift, maxShift + 1);
+        int redShiftY = random.Next(-maxShift / 3, maxShift / 3 + 1);
+        int blueShiftX = random.Next(-maxShift, maxShift + 1);
+        int blueShiftY = random.Next(-maxShift / 3, maxShift / 3 + 1);
 
         // Process each pixel
         image.ProcessPixelRows(redChannel, blueChannel, (mainAccessor, redAccessor, blueAccessor) =>
@@ -1809,15 +2144,15 @@ public class MarathonCreatorService
     /// <summary>
     /// Applies horizontal wave distortion effect.
     /// </summary>
-    private void ApplyImageDistortion(Image<Rgba32> image, float intensity)
+    private void ApplyImageDistortion(Image<Rgba32> image, float intensity, Random random)
     {
         // Distortion amplitude scales with intensity (0-40 pixels at max)
         float amplitude = 40 * intensity;
         if (amplitude < 1) return;
 
         // Random wave frequency
-        float frequency = 0.005f + (GlitchRandom.NextSingle() * 0.015f);
-        float phase = GlitchRandom.NextSingle() * MathF.PI * 2;
+        float frequency = 0.005f + ((float)random.NextDouble() * 0.015f);
+        float phase = (float)random.NextDouble() * MathF.PI * 2;
 
         using var original = image.Clone();
 
@@ -1848,7 +2183,7 @@ public class MarathonCreatorService
     /// <summary>
     /// Applies random block glitch effect (displaced rectangular regions).
     /// </summary>
-    private void ApplyBlockGlitches(Image<Rgba32> image, float intensity)
+    private void ApplyBlockGlitches(Image<Rgba32> image, float intensity, Random random)
     {
         // Number of glitch blocks scales with intensity
         int blockCount = (int)(20 * intensity);
@@ -1859,15 +2194,15 @@ public class MarathonCreatorService
         for (int i = 0; i < blockCount; i++)
         {
             // Random block dimensions
-            int blockWidth = GlitchRandom.Next(50, 400);
-            int blockHeight = GlitchRandom.Next(5, 50);
+            int blockWidth = random.Next(50, 400);
+            int blockHeight = random.Next(5, 50);
             
             // Random source position
-            int srcX = GlitchRandom.Next(0, image.Width - blockWidth);
-            int srcY = GlitchRandom.Next(0, image.Height - blockHeight);
+            int srcX = random.Next(0, image.Width - blockWidth);
+            int srcY = random.Next(0, image.Height - blockHeight);
             
             // Random horizontal displacement
-            int offsetX = GlitchRandom.Next(-100, 101);
+            int offsetX = random.Next(-100, 101);
             int destX = Math.Clamp(srcX + offsetX, 0, image.Width - blockWidth);
             
             // Copy the block with displacement
@@ -1889,11 +2224,11 @@ public class MarathonCreatorService
             });
             
             // Occasionally add color tint to block
-            if (GlitchRandom.NextDouble() < 0.3)
+            if (random.NextDouble() < 0.3)
             {
-                byte tintR = (byte)(GlitchRandom.NextDouble() < 0.5 ? 255 : 0);
-                byte tintG = (byte)(GlitchRandom.NextDouble() < 0.5 ? 255 : 0);
-                byte tintB = (byte)(GlitchRandom.NextDouble() < 0.5 ? 255 : 0);
+                byte tintR = (byte)(random.NextDouble() < 0.5 ? 255 : 0);
+                byte tintG = (byte)(random.NextDouble() < 0.5 ? 255 : 0);
+                byte tintB = (byte)(random.NextDouble() < 0.5 ? 255 : 0);
                 float tintStrength = 0.2f + (0.3f * intensity);
                 
                 image.ProcessPixelRows(accessor =>
