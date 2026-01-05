@@ -68,23 +68,6 @@ jobs:
       - name: Restore .NET dependencies
         run: dotnet restore OsuMappingHelper/OsuMappingHelper.csproj
 
-      - name: Read version
-        id: version
-        shell: pwsh
-        run: |
-          $version = Get-Content "OsuMappingHelper/version.txt" -Raw
-          $version = $version.Trim()
-          echo "VERSION=$version" >> $env:GITHUB_OUTPUT
-          # Convert to semver for Squirrel (v5.60 -> 5.60.0)
-          $semver = $version -replace '^v', ''
-          if ($semver -notmatch '^\d+\.\d+\.\d+') {
-            if ($semver -match '^\d+\.\d+$') {
-              $semver = "$semver.0"
-            }
-          }
-          echo "SEMVER=$semver" >> $env:GITHUB_OUTPUT
-          echo "Version: $version (semver: $semver)"
-
       - name: Download previous release for delta generation
         id: prev_release
         shell: pwsh
@@ -141,6 +124,23 @@ jobs:
         shell: pwsh
         run: |
           ./build.ps1 -Configuration Release
+
+      - name: Read version (after build increment)
+        id: version
+        shell: pwsh
+        run: |
+          $version = Get-Content "OsuMappingHelper/version.txt" -Raw
+          $version = $version.Trim()
+          echo "VERSION=$version" >> $env:GITHUB_OUTPUT
+          # Convert to semver for Squirrel (v5.60 -> 5.60.0)
+          $semver = $version -replace '^v', ''
+          if ($semver -notmatch '^\d+\.\d+\.\d+') {
+            if ($semver -match '^\d+\.\d+$') {
+              $semver = "$semver.0"
+            }
+          }
+          echo "SEMVER=$semver" >> $env:GITHUB_OUTPUT
+          echo "Version: $version (semver: $semver)"
 
       - name: List release artifacts
         shell: pwsh
