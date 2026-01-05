@@ -1,3 +1,34 @@
+---
+
+# ⚠️ Important Update Notice
+
+## Mandatory Full Re-download for Versions **below v5.69**
+
+If you are currently running **any version lower than v5.69**, **incremental or delta updates are not supported**.
+
+### What this means
+- Your existing installation **cannot be updated safely**
+- Continuing to use the built-in updater **will fail or cause issues**
+- A **full re-download and reinstall is required**
+
+### Required action
+1. **Uninstall** the current application
+2. **Download the latest release** from the official source
+3. **Install fresh**
+
+### Why this is necessary
+Versions prior to **v5.69** use an outdated packaging and update layout that is **incompatible with the current update system**. This is a hard technical limitation.
+
+**There is no workaround.**
+
+
+
+
+---
+
+
+
+
 ![Companella](OsuMappingHelper/icon.ico)
 
 # Companella!
@@ -10,7 +41,8 @@ A powerful companion tool for osu!mania players and mappers. Track your progress
 
 ## Download
 
-**[Download the Easy Installer](https://github.com/Leinadix/companella/releases/tag/installer)**
+**[Download the Installer](https://github.com/Leinadix/companella/releases/latest/download/CompanellaSetup.exe)**
+
 
 Just download and run - the installer handles everything for you.
 
@@ -67,7 +99,7 @@ Companella checks for updates automatically and notifies you when a new version 
 
 ## Getting Started
 
-1. Download and run the [Easy Installer](https://github.com/Leinadix/companella/releases/tag/installer)
+1. Download and run the [Installer](https://github.com/Leinadix/companella/releases/latest/download/CompanellaSetup.exe)
 2. Launch Companella
 3. Open osu! - the tool will automatically connect and start detecting beatmaps
 4. Start practicing and watch your skills improve!
