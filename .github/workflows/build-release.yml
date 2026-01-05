@@ -20,6 +20,8 @@ env:
 jobs:
   build:
     runs-on: windows-latest
+    permissions:
+      contents: write
     
     steps:
       - name: Checkout repository
@@ -150,22 +152,21 @@ jobs:
             
             ### Installation
             
-            **New Users:** Download and run `Setup.exe`
+            **New Users:** Download and run `CompanellaSetup.exe`
             
-            **Existing Users:** The app will auto-update, or download the latest `Setup.exe`
+            **Existing Users:** The app will auto-update, or download the latest `CompanellaSetup.exe`
             
             ### Files
-            - `Setup.exe` - Installer (run this to install or update)
+            - `CompanellaSetup.exe` - Installer (run this to install or update)
             - `Companella-${{ steps.version.outputs.SEMVER }}-full.nupkg` - Full update package
             - `Companella-${{ steps.version.outputs.SEMVER }}-delta.nupkg` - Delta update (smaller, faster)
             - `RELEASES` - Release manifest for auto-updater
           files: |
-            Releases/Setup.exe
+            Releases/*Setup.exe
             Releases/RELEASES
             Releases/*.nupkg
           draft: false
           prerelease: false
-          generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
