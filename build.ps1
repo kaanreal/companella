@@ -301,13 +301,18 @@ if (-not $SkipSquirrel -and $Configuration -eq "Release") {
     
     Write-Host "  Version: $Version"
     
-    # Create Releases directory (clean it first to avoid stale packages)
+    # Create Releases directory (preserve existing files for delta generation)
     $ReleasesDir = Join-Path $ProjectRoot "Releases"
-    if (Test-Path $ReleasesDir) {
-        Write-Host "  Cleaning old releases..."
-        Remove-Item $ReleasesDir -Recurse -Force
+    if (-not (Test-Path $ReleasesDir)) {
+        New-Item -ItemType Directory -Path $ReleasesDir | Out-Null
+    } else {
+        # List existing files that will be used for delta generation
+        $existingFiles = Get-ChildItem $ReleasesDir -ErrorAction SilentlyContinue
+        if ($existingFiles) {
+            Write-Host "  Found existing release files (for delta generation):"
+            $existingFiles | ForEach-Object { Write-Host "    - $($_.Name)" }
+        }
     }
-    New-Item -ItemType Directory -Path $ReleasesDir | Out-Null
     
     # Find Squirrel tools (installed via NuGet)
     $SquirrelExe = $null

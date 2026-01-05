@@ -102,14 +102,32 @@ jobs:
               $latestTag = $releases[0].tagName
               echo "Found previous release: $latestTag"
               
-              # Download RELEASES file and full nupkg for delta generation
+              # Download RELEASES file for delta generation
               echo "Downloading RELEASES file..."
-              gh release download $latestTag --pattern "RELEASES" --dir "Releases" --clobber 2>$null
+              $result = gh release download $latestTag --pattern "RELEASES" --dir "Releases" --clobber 2>&1
+              if (Test-Path "Releases/RELEASES") {
+                echo "✓ RELEASES file downloaded"
+              } else {
+                echo "✗ RELEASES file not found"
+              }
               
+              # Download full nupkg for delta generation
               echo "Downloading full nupkg..."
-              gh release download $latestTag --pattern "*-full.nupkg" --dir "Releases" --clobber 2>$null
+              $result = gh release download $latestTag --pattern "*-full.nupkg" --dir "Releases" --clobber 2>&1
+              $nupkgFiles = Get-ChildItem "Releases" -Filter "*-full.nupkg" -ErrorAction SilentlyContinue
+              if ($nupkgFiles) {
+                echo "✓ Downloaded: $($nupkgFiles.Name -join ', ')"
+                echo "PREV_RELEASE_FOUND=true" >> $env:GITHUB_OUTPUT
+              } else {
+                echo "✗ No full nupkg files found"
+                echo "PREV_RELEASE_FOUND=false" >> $env:GITHUB_OUTPUT
+              }
               
-              echo "PREV_RELEASE_FOUND=true" >> $env:GITHUB_OUTPUT
+              # List downloaded files
+              echo "=== Downloaded files for delta generation ==="
+              Get-ChildItem "Releases" -ErrorAction SilentlyContinue | ForEach-Object {
+                echo "  $($_.Name) ($([math]::Round($_.Length / 1MB, 2)) MB)"
+              }
             } else {
               echo "No previous releases found"
               echo "PREV_RELEASE_FOUND=false" >> $env:GITHUB_OUTPUT
@@ -139,6 +157,27 @@ jobs:
           name: release-${{ steps.version.outputs.VERSION }}
           path: Releases/
           retention-days: 30
+
+      - name: Create version tag
+        if: github.ref == 'refs/heads/live' || (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $version = "${{ steps.version.outputs.VERSION }}"
+          echo "Creating tag: $version"
+          
+          # Check if tag already exists
+          $existingTag = git tag -l $version
+          if ($existingTag) {
+            echo "Tag $version already exists, skipping creation"
+          } else {
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git tag -a $version -m "Release $version"
+            git push origin $version
+            echo "Tag $version created and pushed"
+          }
 
       - name: Create GitHub Release
         if: github.ref == 'refs/heads/live' || (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true')
