@@ -71,6 +71,8 @@ public partial class OsuMappingHelperGame : Game
     private bool _isWindowVisible = true;
     private bool _wasOsuRunning = false;
     private System.Drawing.Point _savedWindowPosition;
+    private DateTimeOffset _lastOverlayToggleTime = DateTimeOffset.MinValue;
+    private const double OVERLAY_TOGGLE_COOLDOWN_MS = 500; // 0.5 second cooldown
     
     // Flag to track if we've performed the startup restart after first connection
     private bool _hasPerformedStartupRestart = false;
@@ -783,6 +785,14 @@ public partial class OsuMappingHelperGame : Game
         // Only toggle visibility when in overlay mode
         if (_overlayService?.IsOverlayMode == true)
         {
+            // Enforce cooldown to prevent rapid toggling
+            var timeSinceLastToggle = (DateTimeOffset.Now - _lastOverlayToggleTime).TotalMilliseconds;
+            if (timeSinceLastToggle < OVERLAY_TOGGLE_COOLDOWN_MS)
+            {
+                return;
+            }
+            
+            _lastOverlayToggleTime = DateTimeOffset.Now;
             ToggleWindowVisibility();
         }
     }
