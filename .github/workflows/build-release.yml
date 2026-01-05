@@ -97,19 +97,17 @@ jobs:
           
           # Try to download previous release files for delta generation
           try {
-            $releases = gh release list --limit 1 --json tagName,assets | ConvertFrom-Json
+            $releases = gh release list --limit 1 --json tagName | ConvertFrom-Json
             if ($releases -and $releases.Count -gt 0) {
               $latestTag = $releases[0].tagName
               echo "Found previous release: $latestTag"
               
               # Download RELEASES file and full nupkg for delta generation
-              $assets = gh release view $latestTag --json assets | ConvertFrom-Json
-              foreach ($asset in $assets.assets) {
-                if ($asset.name -eq "RELEASES" -or $asset.name -like "*-full.nupkg") {
-                  echo "Downloading: $($asset.name)"
-                  gh release download $latestTag --pattern $asset.name --dir "Releases" --clobber
-                }
-              }
+              echo "Downloading RELEASES file..."
+              gh release download $latestTag --pattern "RELEASES" --dir "Releases" --clobber 2>$null
+              
+              echo "Downloading full nupkg..."
+              gh release download $latestTag --pattern "*-full.nupkg" --dir "Releases" --clobber 2>$null
               
               echo "PREV_RELEASE_FOUND=true" >> $env:GITHUB_OUTPUT
             } else {
