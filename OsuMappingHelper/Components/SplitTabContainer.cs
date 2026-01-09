@@ -28,8 +28,8 @@ public partial class SplitTabContainer : CompositeDrawable
     private readonly Color4 _sidebarBgColor = new Color4(25, 25, 30, 255);
     private readonly Color4 _contentBgColor = new Color4(20, 20, 25, 255);
 
-    private const float SIDEBAR_WIDTH = 140f;
-    private const float BUTTON_HEIGHT = 36f;
+    private const float SidebarWidth = 140f;
+    private const float ButtonHeight = 36f;
 
     /// <summary>
     /// Event raised when the selected item changes.
@@ -57,7 +57,7 @@ public partial class SplitTabContainer : CompositeDrawable
                 RelativeSizeAxes = Axes.Both,
                 ColumnDimensions = new[]
                 {
-                    new Dimension(GridSizeMode.Absolute, SIDEBAR_WIDTH),
+                    new Dimension(GridSizeMode.Absolute, SidebarWidth),
                     new Dimension()
                 },
                 Content = new[]
@@ -89,7 +89,7 @@ public partial class SplitTabContainer : CompositeDrawable
                                 _selectionIndicator = new Box
                                 {
                                     Width = 3,
-                                    Height = BUTTON_HEIGHT,
+                                    Height = ButtonHeight,
                                     Colour = _accentColor,
                                     Anchor = Anchor.TopLeft,
                                     Origin = Anchor.TopLeft
@@ -178,7 +178,7 @@ public partial class SplitTabContainer : CompositeDrawable
             var button = new SidebarButton(_items[i].Name, i == _selectedIndex, _accentColor, _inactiveColor)
             {
                 RelativeSizeAxes = Axes.X,
-                Height = BUTTON_HEIGHT
+                Height = ButtonHeight
             };
             button.Clicked += () => SelectItem(index);
             _sidebarButtons[i] = button;
@@ -216,7 +216,7 @@ public partial class SplitTabContainer : CompositeDrawable
     {
         if (_sidebarButtons == null || _sidebarButtons.Length == 0) return;
 
-        var targetY = 5 + (_selectedIndex * BUTTON_HEIGHT); // 5 is the top padding
+        var targetY = 5 + (_selectedIndex * ButtonHeight); // 5 is the top padding
 
         if (animate)
         {

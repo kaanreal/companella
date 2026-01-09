@@ -57,7 +57,7 @@ public partial class TrainingScreen : osu.Framework.Screens.Screen
     private OsuFile? _currentOsuFile;
     private string? _lastDetectedBeatmap;
     private double _beatmapCheckTimer;
-    private const double BEATMAP_CHECK_INTERVAL = 1000;
+    private const double BeatmapCheckInterval = 1000;
 
     // Analysis state
     private CancellationTokenSource? _analysisCancellation;
@@ -520,7 +520,7 @@ public partial class TrainingScreen : osu.Framework.Screens.Screen
 
         // Periodically check for beatmap changes (same as MainScreen)
         _beatmapCheckTimer += Clock.ElapsedFrameTime;
-        if (_beatmapCheckTimer >= BEATMAP_CHECK_INTERVAL)
+        if (_beatmapCheckTimer >= BeatmapCheckInterval)
         {
             _beatmapCheckTimer = 0;
             CheckForBeatmapChanges();

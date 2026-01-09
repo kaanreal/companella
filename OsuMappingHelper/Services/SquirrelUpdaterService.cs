@@ -13,8 +13,8 @@ namespace OsuMappingHelper.Services;
 /// </summary>
 public class SquirrelUpdaterService : IDisposable
 {
-    private const string GITHUB_REPO_URL = "https://github.com/Leinadix/companella";
-    private const string VERSION_FILE_NAME = "version.txt";
+    private const string GitHubRepoUrl = "https://github.com/Leinadix/companella";
+    private const string VersionFileName = "version.txt";
 
     private readonly string _versionFilePath;
     private bool _isDisposed;
@@ -98,9 +98,9 @@ public class SquirrelUpdaterService : IDisposable
 
         try
         {
-            Console.WriteLine($"[SquirrelUpdater] Checking for updates from: {GITHUB_REPO_URL}");
+            Console.WriteLine($"[SquirrelUpdater] Checking for updates from: {GitHubRepoUrl}");
 
-            using var updateManager = await UpdateManager.GitHubUpdateManager(GITHUB_REPO_URL);
+            using var updateManager = await UpdateManager.GitHubUpdateManager(GitHubRepoUrl);
             
             var updateInfo = await updateManager.CheckForUpdate();
             
@@ -127,7 +127,7 @@ public class SquirrelUpdaterService : IDisposable
                 PublishedAt = DateTime.UtcNow,
                 DownloadUrl = "", // Not used with Squirrel
                 DownloadSize = latestRelease.Filesize,
-                HtmlUrl = $"{GITHUB_REPO_URL}/releases/tag/v{newVersion}"
+                HtmlUrl = $"{GitHubRepoUrl}/releases/tag/v{newVersion}"
             };
 
             UpdateAvailable?.Invoke(this, result);
@@ -162,7 +162,7 @@ public class SquirrelUpdaterService : IDisposable
 
             ReportProgress(progress, 0, "Preparing update...");
 
-            using var updateManager = await UpdateManager.GitHubUpdateManager(GITHUB_REPO_URL);
+            using var updateManager = await UpdateManager.GitHubUpdateManager(GitHubRepoUrl);
 
             // Check for updates again to get the release entries
             var updateResult = await updateManager.CheckForUpdate();

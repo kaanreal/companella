@@ -12,21 +12,21 @@ namespace OsuMappingHelper.Services;
 public class InterludeDifficultyService
 {
     // Constants from YAVSRG's Difficulty.fs
-    private const float CURVE_POWER = 0.6f;
-    private const float CURVE_SCALE = 0.4056f;
-    private const float MOST_IMPORTANT_NOTES = 2500.0f;
+    private const float CurvePower = 0.6f;
+    private const float CurveScale = 0.4056f;
+    private const float MostImportantNotes = 2500.0f;
 
     // Constants from YAVSRG's Notes.fs
-    private const float JACK_CURVE_CUTOFF = 230.0f;
-    private const float STREAM_CURVE_CUTOFF = 10.0f;
-    private const float STREAM_CURVE_CUTOFF_2 = 10.0f;
-    private const float OHTNERF = 3.0f;
-    private const float STREAM_SCALE = 6.0f;
-    private const float STREAM_POW = 0.5f;
+    private const float JackCurveCutoff = 230.0f;
+    private const float StreamCurveCutoff = 10.0f;
+    private const float StreamCurveCutoff2 = 10.0f;
+    private const float OhtNerf = 3.0f;
+    private const float StreamScale = 6.0f;
+    private const float StreamPow = 0.5f;
 
     // Constants from YAVSRG's Strain.fs
-    private const float STRAIN_SCALE = 0.01626f;
-    private const float STRAIN_TIME_CAP = 200.0f; // ms/rate
+    private const float StrainScale = 0.01626f;
+    private const float StrainTimeCap = 200.0f; // ms/rate
 
     /// <summary>
     /// Weighting curve function from YAVSRG.
@@ -56,7 +56,7 @@ public class InterludeDifficultyService
         for (int i = 0; i < dataArray.Length; i++)
         {
             // Calculate position through the top 2500 notes
-            var position = (i + MOST_IMPORTANT_NOTES - length) / MOST_IMPORTANT_NOTES;
+            var position = (i + MostImportantNotes - length) / MostImportantNotes;
             var x = Math.Max(0.0f, position);
             
             var w = WeightingCurve(x);
@@ -69,7 +69,7 @@ public class InterludeDifficultyService
 
         // Final transform: Power and rescale to YAVSRG's difficulty scale
         var weightedAverage = total / weight;
-        var result = (float)Math.Pow(weightedAverage, CURVE_POWER) * CURVE_SCALE;
+        var result = (float)Math.Pow(weightedAverage, CurvePower) * CurveScale;
 
         return float.IsFinite(result) ? result : 0.0f;
     }
@@ -80,7 +80,7 @@ public class InterludeDifficultyService
     /// </summary>
     private static float MsToJackBpm(float deltaMs)
     {
-        return Math.Min(15000.0f / deltaMs, JACK_CURVE_CUTOFF);
+        return Math.Min(15000.0f / deltaMs, JackCurveCutoff);
     }
 
     /// <summary>
@@ -89,7 +89,7 @@ public class InterludeDifficultyService
     /// </summary>
     private static float MsToStreamBpm(float deltaMs)
     {
-        var result = 300.0f / (0.02f * deltaMs) - 300.0f / (float)Math.Pow(0.02f * deltaMs, STREAM_CURVE_CUTOFF) / STREAM_CURVE_CUTOFF_2;
+        var result = 300.0f / (0.02f * deltaMs) - 300.0f / (float)Math.Pow(0.02f * deltaMs, StreamCurveCutoff) / StreamCurveCutoff2;
         return Math.Max(0.0f, result);
     }
 
@@ -114,10 +114,10 @@ public class InterludeDifficultyService
     private static float CalculateNoteTotal(float j, float sl, float sr)
     {
         return (float)Math.Pow(
-            Math.Pow(STREAM_SCALE * (float)Math.Pow(sl, STREAM_POW), OHTNERF) +
-            Math.Pow(STREAM_SCALE * (float)Math.Pow(sr, STREAM_POW), OHTNERF) +
-            Math.Pow(j, OHTNERF),
-            1.0f / OHTNERF
+            Math.Pow(StreamScale * (float)Math.Pow(sl, StreamPow), OhtNerf) +
+            Math.Pow(StreamScale * (float)Math.Pow(sr, StreamPow), OhtNerf) +
+            Math.Pow(j, OhtNerf),
+            1.0f / OhtNerf
         );
     }
 
@@ -127,13 +127,13 @@ public class InterludeDifficultyService
     private static float StrainFunc(float halfLifeMs, float currentValue, float input, float deltaMs)
     {
         var decayRate = (float)Math.Log(0.5) / halfLifeMs;
-        var decay = (float)Math.Exp(decayRate * Math.Min(STRAIN_TIME_CAP, deltaMs));
-        var timeCapDecay = deltaMs > STRAIN_TIME_CAP 
-            ? (float)Math.Exp(decayRate * (deltaMs - STRAIN_TIME_CAP)) 
+        var decay = (float)Math.Exp(decayRate * Math.Min(StrainTimeCap, deltaMs));
+        var timeCapDecay = deltaMs > StrainTimeCap 
+            ? (float)Math.Exp(decayRate * (deltaMs - StrainTimeCap)) 
             : 1.0f;
         
         var a = currentValue * timeCapDecay;
-        var b = input * input * STRAIN_SCALE;
+        var b = input * input * StrainScale;
         return b - (b - a) * decay;
     }
 
