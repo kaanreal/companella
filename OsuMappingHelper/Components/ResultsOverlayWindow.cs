@@ -20,12 +20,12 @@ public partial class ResultsOverlayWindow : CompositeDrawable
     /// <summary>
     /// Base width for 8:4 aspect ratio design.
     /// </summary>
-    public const int BASE_WIDTH = 800;
+    public const int BaseWidth = 800;
     
     /// <summary>
     /// Base height for 8:4 aspect ratio design.
     /// </summary>
-    public const int BASE_HEIGHT = 400;
+    public const int BaseHeight = 400;
     
     private TimingDeviationChart _chart = null!;
     private Container _contentContainer = null!;

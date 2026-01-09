@@ -24,7 +24,7 @@ public partial class StatusDisplay : CompositeDrawable
     private FillFlowContainer _logContainer = null!;
     private BasicScrollContainer _scrollContainer = null!;
     private Box _latestIndicator = null!;
-    private const int MAX_LOG_ENTRIES = 50;
+    private const int MaxLogEntries = 50;
 
     [BackgroundDependencyLoader]
     private void load()
@@ -149,7 +149,7 @@ public partial class StatusDisplay : CompositeDrawable
         _logContainer.Insert(0, entry);
 
         // Remove old entries if exceeding max
-        while (_logContainer.Count > MAX_LOG_ENTRIES)
+        while (_logContainer.Count > MaxLogEntries)
         {
             _logContainer.Remove(_logContainer[^1], true);
         }

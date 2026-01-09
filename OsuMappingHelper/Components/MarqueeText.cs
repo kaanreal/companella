@@ -23,8 +23,8 @@ public partial class MarqueeText : CompositeDrawable
     private float _lastDrawWidth;
     
     // Animation configuration
-    private const float SCROLL_SPEED = 50f; // Pixels per second
-    private const double PAUSE_DURATION = 2000; // Milliseconds to pause at each end
+    private const float ScrollSpeed = 50f; // Pixels per second
+    private const double PauseDuration = 2000; // Milliseconds to pause at each end
     
     private string _text = string.Empty;
     private FontUsage _font = new FontUsage("", 15);
@@ -137,7 +137,7 @@ public partial class MarqueeText : CompositeDrawable
         switch (_state)
         {
             case MarqueeState.PauseStart:
-                if (_stateTime >= PAUSE_DURATION)
+                if (_stateTime >= PauseDuration)
                 {
                     _state = MarqueeState.ScrollLeft;
                     _stateTime = 0;
@@ -147,7 +147,7 @@ public partial class MarqueeText : CompositeDrawable
             case MarqueeState.ScrollLeft:
                 {
                     var maxScroll = GetMaxScroll();
-                    _scrollOffset += (float)(SCROLL_SPEED * elapsed / 1000.0);
+                    _scrollOffset += (float)(ScrollSpeed * elapsed / 1000.0);
                     
                     if (_scrollOffset >= maxScroll)
                     {
@@ -161,7 +161,7 @@ public partial class MarqueeText : CompositeDrawable
                 break;
                 
             case MarqueeState.PauseEnd:
-                if (_stateTime >= PAUSE_DURATION)
+                if (_stateTime >= PauseDuration)
                 {
                     _state = MarqueeState.ScrollRight;
                     _stateTime = 0;
@@ -170,7 +170,7 @@ public partial class MarqueeText : CompositeDrawable
                 
             case MarqueeState.ScrollRight:
                 {
-                    _scrollOffset -= (float)(SCROLL_SPEED * elapsed / 1000.0);
+                    _scrollOffset -= (float)(ScrollSpeed * elapsed / 1000.0);
                     
                     if (_scrollOffset <= 0)
                     {

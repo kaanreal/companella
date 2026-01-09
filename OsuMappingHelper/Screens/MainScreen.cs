@@ -67,7 +67,7 @@ public partial class MainScreen : osu.Framework.Screens.Screen
     private OsuFile? _currentOsuFile;
     private string? _lastDetectedBeatmap;
     private double _beatmapCheckTimer;
-    private const double BEATMAP_CHECK_INTERVAL = 1000; // Check every 1 second
+    private const double BeatmapCheckInterval = 1000; // Check every 1 second
     
     // Store BPM factor for use in background task
     private Models.BpmFactor _pendingBpmFactor;
@@ -1072,7 +1072,7 @@ public partial class MainScreen : osu.Framework.Screens.Screen
 
         // Periodically check for beatmap changes
         _beatmapCheckTimer += Clock.ElapsedFrameTime;
-        if (_beatmapCheckTimer >= BEATMAP_CHECK_INTERVAL)
+        if (_beatmapCheckTimer >= BeatmapCheckInterval)
         {
             _beatmapCheckTimer = 0;
             CheckForBeatmapChanges();

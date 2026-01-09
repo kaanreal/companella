@@ -34,9 +34,9 @@ public partial class BulkRateChangerPanel : CompositeDrawable
     private double _step = 0.1;
     private string _format = RateChanger.DefaultNameFormat;
 
-    private const double MIN_RATE_LIMIT = 0.1;
-    private const double MAX_RATE_LIMIT = 3.0;
-    private const double MIN_STEP = 0.01;
+    private const double MinRateLimit = 0.1;
+    private const double MaxRateLimit = 3.0;
+    private const double MinStep = 0.01;
 
     private readonly Color4 _accentColor = new Color4(255, 102, 170, 255);
 
@@ -274,14 +274,14 @@ public partial class BulkRateChangerPanel : CompositeDrawable
         // Parse min rate
         if (double.TryParse(_minRateTextBox.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out var minVal))
         {
-            _minRate = Math.Clamp(minVal, MIN_RATE_LIMIT, MAX_RATE_LIMIT);
+            _minRate = Math.Clamp(minVal, MinRateLimit, MaxRateLimit);
         }
         _minRateTextBox.Text = _minRate.ToString("0.0#", CultureInfo.InvariantCulture);
 
         // Parse max rate
         if (double.TryParse(_maxRateTextBox.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out var maxVal))
         {
-            _maxRate = Math.Clamp(maxVal, MIN_RATE_LIMIT, MAX_RATE_LIMIT);
+            _maxRate = Math.Clamp(maxVal, MinRateLimit, MaxRateLimit);
         }
         if (_maxRate < _minRate)
             _maxRate = _minRate;
@@ -290,7 +290,7 @@ public partial class BulkRateChangerPanel : CompositeDrawable
         // Parse step
         if (double.TryParse(_stepTextBox.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out var stepVal))
         {
-            _step = Math.Max(stepVal, MIN_STEP);
+            _step = Math.Max(stepVal, MinStep);
         }
         _stepTextBox.Text = _step.ToString("0.0#", CultureInfo.InvariantCulture);
 

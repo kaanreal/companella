@@ -32,7 +32,7 @@ public partial class OsuMappingHelperGame : Game
 
     // Settings saving
     private double _settingsSaveTimer;
-    private const double SETTINGS_SAVE_INTERVAL = 2000; // Save every 2 seconds
+    private const double SettingsSaveInterval = 2000; // Save every 2 seconds
     private System.Drawing.Size _lastWindowSize;
     private System.Drawing.Point _lastWindowPosition;
     private System.Drawing.Size _targetWindowSize = new System.Drawing.Size(480, 810);
@@ -85,7 +85,7 @@ public partial class OsuMappingHelperGame : Game
     private bool _wasOsuRunning = false;
     private System.Drawing.Point _savedWindowPosition;
     private DateTimeOffset _lastOverlayToggleTime = DateTimeOffset.MinValue;
-    private const double OVERLAY_TOGGLE_COOLDOWN_MS = 500; // 0.5 second cooldown
+    private const double OverlayToggleCooldownMs = 500; // 0.5 second cooldown
     
     // Flag to track if we've performed the startup restart after first connection
     private bool _hasPerformedStartupRestart = false;
@@ -188,8 +188,8 @@ public partial class OsuMappingHelperGame : Game
         // Create scaled content container for global UI scaling
         _scaledContainer = new ScaledContentContainer
         {
-            ReferenceWidth = BASE_WIDTH,
-            ReferenceHeight = BASE_HEIGHT
+            ReferenceWidth = BaseWidth,
+            ReferenceHeight = BaseHeight
         };
 
         // Add screen stack to scaled container
@@ -304,12 +304,12 @@ public partial class OsuMappingHelperGame : Game
         }
     }
 
-    private const int BASE_WIDTH = 620;
-    private const int BASE_HEIGHT = 810;
+    private const int BaseWidth = 620;
+    private const int BaseHeight = 810;
     
     // Current scaled window dimensions
-    private int _currentTargetWidth = BASE_WIDTH;
-    private int _currentTargetHeight = BASE_HEIGHT;
+    private int _currentTargetWidth = BaseWidth;
+    private int _currentTargetHeight = BaseHeight;
 
     private void ForceWindowResolution(int width, int height)
     {
@@ -376,8 +376,8 @@ public partial class OsuMappingHelperGame : Game
         if (Window == null) return;
         
         // Calculate new window dimensions
-        _currentTargetWidth = (int)(BASE_WIDTH * scale);
-        _currentTargetHeight = (int)(BASE_HEIGHT * scale);
+        _currentTargetWidth = (int)(BaseWidth * scale);
+        _currentTargetHeight = (int)(BaseHeight * scale);
         
         // Apply via Windows API
         var windowTitle = Window.Title;
@@ -1136,7 +1136,7 @@ public partial class OsuMappingHelperGame : Game
         {
             // Enforce cooldown to prevent rapid toggling
             var timeSinceLastToggle = (DateTimeOffset.Now - _lastOverlayToggleTime).TotalMilliseconds;
-            if (timeSinceLastToggle < OVERLAY_TOGGLE_COOLDOWN_MS)
+            if (timeSinceLastToggle < OverlayToggleCooldownMs)
             {
                 return;
             }
@@ -1200,7 +1200,7 @@ public partial class OsuMappingHelperGame : Game
         if (Window != null)
         {
             _settingsSaveTimer += Clock.ElapsedFrameTime;
-            if (_settingsSaveTimer >= SETTINGS_SAVE_INTERVAL)
+            if (_settingsSaveTimer >= SettingsSaveInterval)
             {
                 _settingsSaveTimer = 0;
                 

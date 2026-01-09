@@ -28,8 +28,8 @@ public partial class OverlayPositionPanel : CompositeDrawable
     private readonly Color4 _normalColor = new Color4(60, 60, 70, 255);
     private readonly Color4 _hoverColor = new Color4(80, 80, 90, 255);
 
-    private const int STEP_SMALL = 10;
-    private const int STEP_LARGE = 50;
+    private const int StepSmall = 10;
+    private const int StepLarge = 50;
 
     [BackgroundDependencyLoader]
     private void load()
@@ -173,7 +173,7 @@ public partial class OverlayPositionPanel : CompositeDrawable
 
     private void AdjustValue(Func<int> getValue, Action<int> setValue, int direction, bool largeStep = false)
     {
-        int step = largeStep ? STEP_LARGE : STEP_SMALL;
+        int step = largeStep ? StepLarge : StepSmall;
         int newValue = getValue() + (direction * step);
         
         // Clamp to reasonable range
