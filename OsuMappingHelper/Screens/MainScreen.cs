@@ -335,6 +335,11 @@ public partial class MainScreen : osu.Framework.Screens.Screen
                         {
                             RelativeSizeAxes = Axes.X
                         },
+                        // Overlay mode toggle
+                        new OverlayModePanel
+                        {
+                            RelativeSizeAxes = Axes.X
+                        },
                         new FillFlowContainer
                         {
                             AutoSizeAxes = Axes.Y,

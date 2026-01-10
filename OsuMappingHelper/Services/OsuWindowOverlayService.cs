@@ -46,6 +46,11 @@ public class OsuWindowOverlayService : IDisposable
     public event EventHandler<System.Drawing.Rectangle>? OsuWindowChanged;
 
     /// <summary>
+    /// Event raised when overlay mode change is requested from UI.
+    /// </summary>
+    public event EventHandler<bool>? OverlayModeChangeRequested;
+
+    /// <summary>
     /// Whether overlay mode is currently enabled.
     /// </summary>
     public bool IsOverlayMode
@@ -164,6 +169,14 @@ public class OsuWindowOverlayService : IDisposable
             osuRect.Value.Left + _overlayOffset.X,
             centerY + _overlayOffset.Y
         );
+    }
+
+    /// <summary>
+    /// Requests a change in overlay mode from UI. Raises OverlayModeChangeRequested event.
+    /// </summary>
+    public void RequestOverlayModeChange(bool enabled)
+    {
+        OverlayModeChangeRequested?.Invoke(this, enabled);
     }
 
     /// <summary>

@@ -493,6 +493,7 @@ public partial class OsuMappingHelperGame : Game
 
         // Initialize overlay mode (will be auto-enabled when osu! is detected)
         _overlayService.OsuWindowChanged += OnOsuWindowChanged;
+        _overlayService.OverlayModeChangeRequested += OnOverlayModeChangeRequested;
         
         // Apply saved overlay offset
         _overlayService.OverlayOffset = new System.Drawing.Point(
@@ -936,6 +937,34 @@ public partial class OsuMappingHelperGame : Game
     }
 
     /// <summary>
+    /// Handles overlay mode change requests from UI (settings panel).
+    /// </summary>
+    private void OnOverlayModeChangeRequested(object? sender, bool enabled)
+    {
+        Schedule(() =>
+        {
+            if (enabled)
+            {
+                // Only enable if osu! is running
+                if (_processDetector.IsOsuRunning)
+                {
+                    EnableOverlayMode();
+                    Logger.Info("[Overlay] Overlay mode enabled via settings");
+                }
+                else
+                {
+                    Logger.Info("[Overlay] Overlay mode setting enabled - will activate when osu! starts");
+                }
+            }
+            else
+            {
+                DisableOverlayMode();
+                Logger.Info("[Overlay] Overlay mode disabled via settings");
+            }
+        });
+    }
+
+    /// <summary>
     /// Updates the overlay window position relative to osu! window.
     /// Only shows overlay if osu! or the overlay itself is in focus and user hasn't hidden it.
     /// </summary>
@@ -1309,10 +1338,16 @@ public partial class OsuMappingHelperGame : Game
                         var osuProcess = Process.GetProcessById(processInfo.ProcessId);
                         _overlayService.AttachToOsu(osuProcess);
                         
-                        // Enable overlay mode automatically
-                        EnableOverlayMode();
-                        
-                        Logger.Info("[Overlay] osu! detected - overlay mode enabled");
+                        // Enable overlay mode only if user has it enabled in settings
+                        if (_userSettingsService.Settings.OverlayMode)
+                        {
+                            EnableOverlayMode();
+                            Logger.Info("[Overlay] osu! detected - overlay mode enabled");
+                        }
+                        else
+                        {
+                            Logger.Info("[Overlay] osu! detected - overlay mode disabled (per user setting)");
+                        }
                         
                         // Perform one-time restart after first connection for proper attachment
                         if (!_hasPerformedStartupRestart)
