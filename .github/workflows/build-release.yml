@@ -126,7 +126,7 @@ jobs:
       - name: Run build script
         shell: pwsh
         run: |
-          ./build.ps1 -Configuration Release
+          ./build.ps1 -Configuration Release -Platform ${{ matrix.platform }}
 
       - name: Read version (after build increment)
         id: version
@@ -157,7 +157,7 @@ jobs:
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: release-${{ steps.version.outputs.VERSION }}
+          name: release-${{ steps.version.outputs.VERSION }}-${{ matrix.platform }}
           path: Releases/
           retention-days: 30
 
