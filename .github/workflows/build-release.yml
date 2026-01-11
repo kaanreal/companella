@@ -309,7 +309,7 @@ jobs:
       # Bridge release: Full GitHub release with Squirrel files (ONE-TIME for migration)
       - name: Create GitHub Release (Bridge)
         if: github.event.inputs.bridge_release == 'true'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v2.4.2
         with:
           tag_name: ${{ steps.version.outputs.VERSION }}
           name: Companella! ${{ steps.version.outputs.VERSION }}
@@ -339,7 +339,7 @@ jobs:
       # Normal release: GitHub release for changelog only (no Squirrel files, not marked as latest)
       - name: Create GitHub Release (Normal)
         if: (github.ref == 'refs/heads/live' || (github.event_name == 'workflow_dispatch' && github.event.inputs.create_release == 'true')) && github.event.inputs.bridge_release != 'true'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v2.4.2
         with:
           tag_name: ${{ steps.version.outputs.VERSION }}
           name: Companella! ${{ steps.version.outputs.VERSION }}
