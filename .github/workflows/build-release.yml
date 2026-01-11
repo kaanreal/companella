@@ -206,45 +206,66 @@ jobs:
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
         run: |
-          # Write SSH key to temp file
+          # Write SSH key to temp file with proper format
           $keyFile = Join-Path $env:RUNNER_TEMP "deploy_key"
-          $env:DEPLOY_SSH_KEY | Out-File -FilePath $keyFile -Encoding ascii -NoNewline
           
-          # Fix line endings (GitHub secrets may have Windows line endings)
-          (Get-Content $keyFile -Raw) -replace "`r`n", "`n" | Set-Content $keyFile -NoNewline
+          # Use .NET to write the key with Unix line endings (LF only)
+          $keyContent = $env:DEPLOY_SSH_KEY -replace "`r`n", "`n" -replace "`r", "`n"
+          # Ensure key ends with newline
+          if (-not $keyContent.EndsWith("`n")) {
+            $keyContent += "`n"
+          }
+          [System.IO.File]::WriteAllText($keyFile, $keyContent)
           
-          # Set proper permissions (Windows doesn't enforce this but SSH may warn)
-          icacls $keyFile /inheritance:r /grant:r "${env:USERNAME}:(R)"
+          echo "SSH key written to: $keyFile"
+          echo "Key file size: $((Get-Item $keyFile).Length) bytes"
           
-          # Upload files via SCP
-          $sshOptions = "-o StrictHostKeyChecking=no -o UserKnownHostsFile=NUL -i `"$keyFile`""
-          $destination = "${env:DEPLOY_USER}@${env:DEPLOY_HOST}:${env:DEPLOY_PATH}/"
+          # Upload files via SCP with verbose output
+          $destination = "$($env:DEPLOY_USER)@$($env:DEPLOY_HOST):$($env:DEPLOY_PATH)/"
           
           echo "Uploading to $destination..."
           
-          # Upload RELEASES file
-          $releasesFile = "Releases/RELEASES"
-          if (Test-Path $releasesFile) {
-            echo "Uploading RELEASES..."
-            $cmd = "scp $sshOptions `"$releasesFile`" `"$destination`""
-            Invoke-Expression $cmd
-            if ($LASTEXITCODE -ne 0) { throw "Failed to upload RELEASES" }
+          # Collect all files to upload
+          $filesToUpload = @()
+          
+          if (Test-Path "Releases/RELEASES") {
+            $filesToUpload += "Releases/RELEASES"
           }
           
-          # Upload nupkg files
           Get-ChildItem "Releases" -Filter "*.nupkg" | ForEach-Object {
-            echo "Uploading $($_.Name)..."
-            $cmd = "scp $sshOptions `"$($_.FullName)`" `"$destination`""
-            Invoke-Expression $cmd
-            if ($LASTEXITCODE -ne 0) { throw "Failed to upload $($_.Name)" }
+            $filesToUpload += $_.FullName
           }
           
-          # Upload Setup.exe
           Get-ChildItem "Releases" -Filter "*Setup.exe" | ForEach-Object {
-            echo "Uploading $($_.Name)..."
-            $cmd = "scp $sshOptions `"$($_.FullName)`" `"$destination`""
-            Invoke-Expression $cmd
-            if ($LASTEXITCODE -ne 0) { throw "Failed to upload $($_.Name)" }
+            $filesToUpload += $_.FullName
+          }
+          
+          echo "Files to upload: $($filesToUpload.Count)"
+          $filesToUpload | ForEach-Object { echo "  - $_" }
+          
+          # Upload each file
+          foreach ($file in $filesToUpload) {
+            $fileName = Split-Path $file -Leaf
+            echo "Uploading $fileName..."
+            
+            # Use Start-Process to avoid hanging
+            $scpArgs = @(
+              "-v",
+              "-o", "StrictHostKeyChecking=no",
+              "-o", "UserKnownHostsFile=NUL",
+              "-o", "BatchMode=yes",
+              "-i", $keyFile,
+              $file,
+              $destination
+            )
+            
+            $process = Start-Process -FilePath "scp" -ArgumentList $scpArgs -NoNewWindow -Wait -PassThru
+            
+            if ($process.ExitCode -ne 0) {
+              throw "Failed to upload $fileName (exit code: $($process.ExitCode))"
+            }
+            
+            echo "Uploaded $fileName successfully"
           }
           
           echo "Upload complete!"
