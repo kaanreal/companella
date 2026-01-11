@@ -130,7 +130,7 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           
           git add OsuMappingHelper/version.txt
-          git commit -m "chore: bump version to $newVersion"
+          git commit -m "chore: bump version to $newVersion [skip ci]"
           git push origin live
           
           echo "Version bump committed to live branch"
@@ -138,8 +138,6 @@ jobs:
       - name: Sync version to main branch
         if: steps.bump_version.outputs.VERSION_CHANGED == 'true'
         shell: pwsh
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           $newVersion = "${{ steps.bump_version.outputs.NEW_VERSION }}"
           
@@ -151,7 +149,7 @@ jobs:
           Set-Content -Path "OsuMappingHelper/version.txt" -Value $newVersion -NoNewline
           
           git add OsuMappingHelper/version.txt
-          git commit -m "chore: sync version to $newVersion after release"
+          git commit -m "chore: sync version to $newVersion [skip ci]"
           git push origin main
           
           echo "Version synced to main branch"
