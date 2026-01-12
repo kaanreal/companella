@@ -60,7 +60,7 @@ public partial class FunctionButtonPanel : CompositeDrawable
                         Spacing = new Vector2(8, 0),
                         Children = new Drawable[]
                         {
-                            _analyzeBpmButton = new FunctionButton("Analyze BPM")
+                            _analyzeBpmButton = new FunctionButton("BPM (BETA)")
                             {
                                 Width = 100,
                                 Height = 32,
