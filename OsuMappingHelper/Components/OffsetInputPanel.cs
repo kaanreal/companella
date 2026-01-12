@@ -60,7 +60,8 @@ public partial class OffsetInputPanel : CompositeDrawable
                             _minusButton = new FunctionButton("-10")
                             {
                                 Width = 45,
-                                Height = 32
+                                Height = 32,
+                                TooltipText = "Decrease offset by 10ms"
                             },
                             new Container
                             {
@@ -100,13 +101,15 @@ public partial class OffsetInputPanel : CompositeDrawable
                             _plusButton = new FunctionButton("+10")
                             {
                                 Width = 45,
-                                Height = 32
+                                Height = 32,
+                                TooltipText = "Increase offset by 10ms"
                             },
                             _applyButton = new FunctionButton("Apply")
                             {
                                 Width = 70,
                                 Height = 32,
-                                Enabled = false
+                                Enabled = false,
+                                TooltipText = "Shift all timing points by the specified milliseconds"
                             }
                         }
                     }

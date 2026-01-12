@@ -4,6 +4,7 @@ using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
 using osu.Framework.Graphics.Shapes;
 using osu.Framework.Graphics.Sprites;
+using osu.Framework.Input.Events;
 using osuTK;
 using osuTK.Graphics;
 using OsuMappingHelper.Models;
@@ -107,7 +108,7 @@ public partial class PatternDisplay : CompositeDrawable
                 Anchor = Anchor.BottomRight,
                 Origin = Anchor.BottomRight,
                 Alpha = 0,
-                Child = new Container
+                Child = new HoverableClassifierBox
                 {
                     AutoSizeAxes = Axes.Both,
                     Masking = true,
@@ -131,7 +132,7 @@ public partial class PatternDisplay : CompositeDrawable
                             {
                                 _classifierLabel = new SpriteText
                                 {
-                                    Text = "Dan:",
+                                    Text = "Dan (BETA):",
                                     Font = new FontUsage("", 16),
                                     Colour = new Color4(140, 140, 140, 255),
                                     Anchor = Anchor.CentreLeft,
@@ -151,11 +152,13 @@ public partial class PatternDisplay : CompositeDrawable
                                     Font = new FontUsage("", 17),
                                     Colour = new Color4(120, 120, 120, 255),
                                     Anchor = Anchor.CentreLeft,
-                                    Origin = Anchor.CentreLeft
+                                    Origin = Anchor.CentreLeft,
+                                    Alpha = 0 // Hidden by default, shown on hover
                                 }
                             }
                         }
-                    }
+                    },
+                    DetailText = _classifierDetail
                 }
             }
         };
@@ -523,6 +526,29 @@ public partial class PatternDisplay : CompositeDrawable
                     }
                 }
             };
+        }
+    }
+
+    /// <summary>
+    /// A container that shows/hides detail text on hover.
+    /// </summary>
+    private partial class HoverableClassifierBox : Container
+    {
+        /// <summary>
+        /// The detail text to show/hide on hover.
+        /// </summary>
+        public SpriteText? DetailText { get; set; }
+
+        protected override bool OnHover(HoverEvent e)
+        {
+            DetailText?.FadeTo(1, 150);
+            return base.OnHover(e);
+        }
+
+        protected override void OnHoverLost(HoverLostEvent e)
+        {
+            DetailText?.FadeTo(0, 150);
+            base.OnHoverLost(e);
         }
     }
 }

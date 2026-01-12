@@ -1,9 +1,11 @@
 using osu.Framework.Allocation;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
+using osu.Framework.Graphics.Cursor;
 using osu.Framework.Graphics.Shapes;
 using osu.Framework.Graphics.Sprites;
 using osu.Framework.Input.Events;
+using osu.Framework.Localisation;
 using osuTK;
 using osuTK.Graphics;
 using OsuMappingHelper.Models;
@@ -154,7 +156,8 @@ public partial class ModSelectionPanel : CompositeDrawable
                             _applyButton = new ModernButton("Apply Mod", _accentColor)
                             {
                                 Size = new Vector2(120, 36),
-                                Enabled = false
+                                Enabled = false,
+                                TooltipText = "Apply the selected mod to create a new difficulty"
                             },
                             _statusText = new SpriteText
                             {
@@ -404,7 +407,7 @@ public partial class ModSelectionPanel : CompositeDrawable
     /// <summary>
     /// Modern styled button.
     /// </summary>
-    private partial class ModernButton : CompositeDrawable
+    private partial class ModernButton : CompositeDrawable, IHasTooltip
     {
         private readonly string _text;
         private readonly Color4 _color;
@@ -412,6 +415,11 @@ public partial class ModSelectionPanel : CompositeDrawable
 
         private Box _background = null!;
         private SpriteText _label = null!;
+
+        /// <summary>
+        /// Tooltip text displayed on hover.
+        /// </summary>
+        public LocalisableString TooltipText { get; set; }
 
         public event Action? Clicked;
 

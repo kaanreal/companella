@@ -4,12 +4,14 @@ using osu.Framework.Allocation;
 using osu.Framework.Bindables;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
+using osu.Framework.Graphics.Cursor;
 using osu.Framework.Graphics.Rendering;
 using osu.Framework.Graphics.Shapes;
 using osu.Framework.Graphics.Sprites;
 using osu.Framework.Graphics.Textures;
 using osu.Framework.Graphics.UserInterface;
 using osu.Framework.Input.Events;
+using osu.Framework.Localisation;
 using osuTK;
 using osuTK.Graphics;
 using OsuMappingHelper.Models;
@@ -131,11 +133,13 @@ public partial class MarathonCreatorPanel : CompositeDrawable
                                             _addButton = new ModernButton("Add Current Map")
                                             {
                                                 Size = new Vector2(140, 32),
-                                                Enabled = false
+                                                Enabled = false,
+                                                TooltipText = "Add the currently selected beatmap to the marathon"
                                             },
                                             _addPauseButton = new ModernButton("Pause", enabledColor: new Color4(60, 180, 60, 255))
                                             {
                                                 Size = new Vector2(70, 32),
+                                                TooltipText = "Add a pause break between maps"
                                             },
                                             _pauseDurationTextBox = new StyledTextBox
                                             {
@@ -146,12 +150,14 @@ public partial class MarathonCreatorPanel : CompositeDrawable
                                             _clearButton = new ModernButton("Clear All", enabledColor: new Color4(180, 60, 60, 255))
                                             {
                                                 Size = new Vector2(90, 32),
-                                                Enabled = false
+                                                Enabled = false,
+                                                TooltipText = "Remove all entries from the marathon"
                                             },
                                             _msdButton = new ModernButton("MSD")
                                             {
                                                 Size = new Vector2(50, 32),
-                                                Enabled = false
+                                                Enabled = false,
+                                                TooltipText = "Recalculate MSD ratings for all entries"
                                             }
                                     }
                                 }
@@ -290,7 +296,8 @@ public partial class MarathonCreatorPanel : CompositeDrawable
                                 {
                                     RelativeSizeAxes = Axes.X,
                                     Height = 28,
-                                    Enabled = false
+                                    Enabled = false,
+                                    TooltipText = "Update the background image preview"
                                 }
                             }
                         }
@@ -300,7 +307,8 @@ public partial class MarathonCreatorPanel : CompositeDrawable
                     {
                         RelativeSizeAxes = Axes.X,
                         Height = 40,
-                        Enabled = false
+                        Enabled = false,
+                        TooltipText = "Combine multiple beatmaps into a single marathon"
                     }
                 }
             }

@@ -2,10 +2,12 @@ using System.Globalization;
 using osu.Framework.Allocation;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
+using osu.Framework.Graphics.Cursor;
 using osu.Framework.Graphics.Shapes;
 using osu.Framework.Graphics.Sprites;
 using osu.Framework.Graphics.UserInterface;
 using osu.Framework.Input.Events;
+using osu.Framework.Localisation;
 using osuTK;
 using osuTK.Graphics;
 using OsuMappingHelper.Services;
@@ -78,12 +80,14 @@ public partial class RateChangerPanel : CompositeDrawable
                                 _rateModeButton = new ModeToggleButton("Rate", true, _accentColor)
                                 {
                                     Size = new Vector2(80, 28),
-                                    Action = () => SetMode(isTargetBpmMode: false)
+                                    Action = () => SetMode(isTargetBpmMode: false),
+                                    TooltipText = "Enter rate as a multiplier (e.g., 1.2x)"
                                 },
                                 _bpmModeButton = new ModeToggleButton("Target BPM", false, _accentColor)
                                 {
                                     Size = new Vector2(100, 28),
-                                    Action = () => SetMode(isTargetBpmMode: true)
+                                    Action = () => SetMode(isTargetBpmMode: true),
+                                    TooltipText = "Enter target BPM and calculate rate automatically"
                                 },
                                 _currentBpmLabel = new SpriteText
                                 {
@@ -101,7 +105,8 @@ public partial class RateChangerPanel : CompositeDrawable
                     _pitchAdjustCheckbox = new SettingsCheckbox
                     {
                         LabelText = "Change Pitch",
-                        IsChecked = true
+                        IsChecked = true,
+                        TooltipText = "When unchecked, preserves original pitch (nightcore-style)"
                     },
                     // Rate Selection Section (shown in Rate mode)
                     _rateInputContainer = new Container
@@ -244,7 +249,8 @@ public partial class RateChangerPanel : CompositeDrawable
                     {
                         RelativeSizeAxes = Axes.X,
                         Height = 40,
-                        Enabled = false
+                        Enabled = false,
+                        TooltipText = "Create a new difficulty with modified audio speed"
                     }
                 }
             }
@@ -279,7 +285,8 @@ public partial class RateChangerPanel : CompositeDrawable
             buttons.Add(new QuickRateButton(rate, rate == 1.0, _accentColor)
             {
                 Size = new Vector2(42, 28),
-                Action = () => SetRate(rate)
+                Action = () => SetRate(rate),
+                TooltipText = $"Create a {rate:0.0#}x speed version"
             });
         }
 
@@ -488,10 +495,15 @@ public partial class RateChangerPanel : CompositeDrawable
 /// <summary>
 /// Quick rate selection button with selection state.
 /// </summary>
-public partial class QuickRateButton : CompositeDrawable
+public partial class QuickRateButton : CompositeDrawable, IHasTooltip
 {
     public double Rate { get; }
     public Action? Action { get; set; }
+
+    /// <summary>
+    /// Tooltip text displayed on hover.
+    /// </summary>
+    public LocalisableString TooltipText { get; set; }
 
     private bool _isSelected;
     private Box _background = null!;
@@ -576,9 +588,14 @@ public partial class QuickRateButton : CompositeDrawable
 /// <summary>
 /// Toggle button for mode selection (Rate vs Target BPM).
 /// </summary>
-public partial class ModeToggleButton : CompositeDrawable
+public partial class ModeToggleButton : CompositeDrawable, IHasTooltip
 {
     public Action? Action { get; set; }
+
+    /// <summary>
+    /// Tooltip text displayed on hover.
+    /// </summary>
+    public LocalisableString TooltipText { get; set; }
 
     private bool _isSelected;
     private Box _background = null!;
@@ -694,7 +711,7 @@ public partial class StyledTextBox : BasicTextBox
 /// <summary>
 /// Modern action button with clean styling.
 /// </summary>
-public partial class ModernButton : CompositeDrawable
+public partial class ModernButton : CompositeDrawable, IHasTooltip
 {
     private readonly string _text;
     private Box _background = null!;
@@ -704,6 +721,11 @@ public partial class ModernButton : CompositeDrawable
 
     private Color4 _enabledColor = new Color4(255, 102, 170, 255);
     private Color4 _disabledColor = new Color4(60, 60, 65, 255);
+
+    /// <summary>
+    /// Tooltip text displayed on hover.
+    /// </summary>
+    public LocalisableString TooltipText { get; set; }
 
     public event Action? Clicked;
 

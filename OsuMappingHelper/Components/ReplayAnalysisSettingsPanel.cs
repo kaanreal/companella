@@ -52,7 +52,8 @@ public partial class ReplayAnalysisSettingsPanel : CompositeDrawable
                     _enabledCheckbox = new SettingsCheckbox
                     {
                         LabelText = "Show replay analysis on results screen",
-                        IsChecked = settings.ReplayAnalysisEnabled
+                        IsChecked = settings.ReplayAnalysisEnabled,
+                        TooltipText = "Show timing deviation chart after completing maps"
                     },
                     new FillFlowContainer
                     {

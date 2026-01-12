@@ -1,9 +1,11 @@
 using osu.Framework.Allocation;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
+using osu.Framework.Graphics.Cursor;
 using osu.Framework.Graphics.Shapes;
 using osu.Framework.Graphics.Sprites;
 using osu.Framework.Input.Events;
+using osu.Framework.Localisation;
 using osuTK.Graphics;
 
 namespace OsuMappingHelper.Components;
@@ -11,12 +13,17 @@ namespace OsuMappingHelper.Components;
 /// <summary>
 /// A styled button for function actions.
 /// </summary>
-public partial class FunctionButton : CompositeDrawable
+public partial class FunctionButton : CompositeDrawable, IHasTooltip
 {
     private readonly string _text;
     private Box _background = null!;
     private Box _hoverOverlay = null!;
     private bool _isEnabled = true;
+
+    /// <summary>
+    /// Tooltip text displayed on hover.
+    /// </summary>
+    public LocalisableString TooltipText { get; set; }
 
     private readonly Color4 _normalColor = new Color4(255, 102, 170, 255);
     private readonly Color4 _hoverColor = new Color4(255, 130, 190, 255);

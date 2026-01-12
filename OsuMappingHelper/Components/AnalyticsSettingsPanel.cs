@@ -47,7 +47,8 @@ public partial class AnalyticsSettingsPanel : CompositeDrawable
                     _analyticsCheckbox = new SettingsCheckbox
                     {
                         LabelText = "Send anonymous usage data",
-                        IsChecked = SettingsService.Settings.SendAnalytics
+                        IsChecked = SettingsService.Settings.SendAnalytics,
+                        TooltipText = "Help improve Companella by sending anonymous usage data"
                     },
                     new SpriteText
                     {

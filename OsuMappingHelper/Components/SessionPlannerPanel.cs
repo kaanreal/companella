@@ -2,6 +2,7 @@ using osu.Framework.Allocation;
 using osu.Framework.Bindables;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
+using osu.Framework.Graphics.Cursor;
 using osu.Framework.Graphics.Shapes;
 using osu.Framework.Graphics.Sprites;
 using osu.Framework.Graphics.UserInterface;
@@ -207,7 +208,8 @@ public partial class SessionPlannerPanel : CompositeDrawable
                             {
                                 Size = new Vector2(140, 32),
                                 Anchor = Anchor.CentreLeft,
-                                Origin = Anchor.CentreLeft
+                                Origin = Anchor.CentreLeft,
+                                TooltipText = "Generate a practice session based on your skill analysis"
                             },
                             _loadingSpinner = new SessionPlanningSpinner
                             {
@@ -643,7 +645,7 @@ public partial class DifficultySlider : CompositeDrawable
 /// <summary>
 /// Button for generating a session.
 /// </summary>
-public partial class SessionGenerateButton : CompositeDrawable
+public partial class SessionGenerateButton : CompositeDrawable, IHasTooltip
 {
     private Box _background = null!;
     private Box _hoverOverlay = null!;
@@ -652,6 +654,11 @@ public partial class SessionGenerateButton : CompositeDrawable
 
     private readonly Color4 _enabledColor = new Color4(255, 102, 170, 255);
     private readonly Color4 _disabledColor = new Color4(80, 80, 85, 255);
+
+    /// <summary>
+    /// Tooltip text displayed on hover.
+    /// </summary>
+    public LocalisableString TooltipText { get; set; }
 
     public event Action? Clicked;
 

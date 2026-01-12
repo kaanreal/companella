@@ -1,6 +1,7 @@
 using osu.Framework;
 using osu.Framework.Allocation;
 using osu.Framework.Graphics;
+using osu.Framework.Graphics.Cursor;
 using osu.Framework.Input.Events;
 using osu.Framework.IO.Stores;
 using osu.Framework.Platform;
@@ -214,7 +215,10 @@ public partial class OsuMappingHelperGame : Game
 
         _scaledContainer.Add(_screenStack);
         
-        Add(_scaledContainer);
+        // Wrap scaled container in TooltipContainer to enable tooltips throughout the app
+        var tooltipContainer = new TooltipContainer { RelativeSizeAxes = Axes.Both };
+        tooltipContainer.Add(_scaledContainer);
+        Add(tooltipContainer);
         
         // Add results overlay for timing deviation display OUTSIDE the scaled container
         // This allows it to properly fill the replay analysis window (800x400)

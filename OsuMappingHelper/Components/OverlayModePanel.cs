@@ -51,7 +51,8 @@ public partial class OverlayModePanel : CompositeDrawable
                     _overlayModeCheckbox = new SettingsCheckbox
                     {
                         LabelText = "Attach window to osu! as overlay",
-                        IsChecked = SettingsService.Settings.OverlayMode
+                        IsChecked = SettingsService.Settings.OverlayMode,
+                        TooltipText = "Window follows osu! position and hides when osu! loses focus"
                     },
                     new SpriteText
                     {

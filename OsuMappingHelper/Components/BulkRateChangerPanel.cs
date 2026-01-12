@@ -2,10 +2,12 @@ using System.Globalization;
 using osu.Framework.Allocation;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
+using osu.Framework.Graphics.Cursor;
 using osu.Framework.Graphics.Shapes;
 using osu.Framework.Graphics.Sprites;
 using osu.Framework.Graphics.UserInterface;
 using osu.Framework.Input.Events;
+using osu.Framework.Localisation;
 using osuTK;
 using osuTK.Graphics;
 using OsuMappingHelper.Services;
@@ -160,7 +162,8 @@ public partial class BulkRateChangerPanel : CompositeDrawable
                     {
                         RelativeSizeAxes = Axes.X,
                         Height = 40,
-                        Enabled = false
+                        Enabled = false,
+                        TooltipText = "Create multiple rate-changed difficulties at once"
                     }
                 }
             }
@@ -190,19 +193,20 @@ public partial class BulkRateChangerPanel : CompositeDrawable
     {
         var presets = new[]
         {
-            ("All in one", 0.6, 1.7, 0.05),
-            ("Default", 0.8, 1.4, 0.1),
-            ("Default enhanced", 0.8, 1.45, 0.05),
-            ("Extreme scaling", 0.9, 1.1, 0.01)
+            ("All in one", 0.6, 1.7, 0.05, "Create rates from 0.6x to 1.7x with 0.05 step"),
+            ("Default", 0.8, 1.4, 0.1, "Create rates from 0.8x to 1.4x with 0.1 step"),
+            ("Default enhanced", 0.8, 1.45, 0.05, "Create rates from 0.8x to 1.45x with 0.05 step"),
+            ("Extreme scaling", 0.9, 1.1, 0.01, "Create rates from 0.9x to 1.1x with 0.01 step")
         };
 
         var buttons = new List<Drawable>();
-        foreach (var (label, min, max, step) in presets)
+        foreach (var (label, min, max, step, tooltip) in presets)
         {
             buttons.Add(new PresetButton(label, $"{min}x - {max}x")
             {
                 Size = new Vector2(90, 36),
-                Action = () => ApplyPreset(min, max, step)
+                Action = () => ApplyPreset(min, max, step),
+                TooltipText = tooltip
             });
         }
 
@@ -402,11 +406,16 @@ public partial class BulkRateChangerPanel : CompositeDrawable
 /// <summary>
 /// Preset button with title and subtitle.
 /// </summary>
-public partial class PresetButton : CompositeDrawable
+public partial class PresetButton : CompositeDrawable, IHasTooltip
 {
     private readonly string _title;
     private readonly string _subtitle;
     public Action? Action { get; set; }
+
+    /// <summary>
+    /// Tooltip text displayed on hover.
+    /// </summary>
+    public LocalisableString TooltipText { get; set; }
 
     private Box _background = null!;
     private Box _hoverOverlay = null!;

@@ -3,9 +3,11 @@ using System.Threading.Tasks;
 using osu.Framework.Allocation;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
+using osu.Framework.Graphics.Cursor;
 using osu.Framework.Graphics.Shapes;
 using osu.Framework.Graphics.Sprites;
 using osu.Framework.Input.Events;
+using osu.Framework.Localisation;
 using osuTK;
 using osuTK.Graphics;
 using osuTK.Input;
@@ -67,6 +69,7 @@ public partial class KeybindConfigPanel : CompositeDrawable
                         HoverColor = _hoverColor,
                         RecordingColor = _recordingColor,
                         KeybindText = FormatKeybind(SettingsService.Settings.ToggleVisibilityKeybind),
+                        TooltipText = "Click to set a new hotkey for toggling overlay visibility",
                         OnKeyDownCallback = OnKeybindKeyDown,
                         OnKeyUpCallback = OnKeybindKeyUp
                     }
@@ -269,7 +272,7 @@ public partial class KeybindConfigPanel : CompositeDrawable
     /// <summary>
     /// Custom button that can receive keyboard input for keybind recording.
     /// </summary>
-    private partial class KeybindButton : ClickableContainer
+    private partial class KeybindButton : ClickableContainer, IHasTooltip
     {
         private Box _background = null!;
         private SpriteText _keybindText = null!;
@@ -280,6 +283,11 @@ public partial class KeybindConfigPanel : CompositeDrawable
         public Color4 RecordingColor { get; set; }
         public string KeybindText { get; set; } = "";
         public Func<KeyDownEvent, bool>? OnKeyDownCallback { get; set; }
+        
+        /// <summary>
+        /// Tooltip text displayed on hover.
+        /// </summary>
+        public LocalisableString TooltipText { get; set; }
         public Action<KeyUpEvent>? OnKeyUpCallback { get; set; }
 
         // Override to accept keyboard focus for keybind recording

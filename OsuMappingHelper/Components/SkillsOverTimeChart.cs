@@ -72,14 +72,6 @@ public partial class SkillsOverTimeChart : CompositeDrawable
                 RelativeSizeAxes = Axes.Both,
                 Colour = new Color4(30, 30, 35, 255)
             },
-            // Title
-            _titleText = new SpriteText
-            {
-                Text = "Skills Over Time",
-                Font = new FontUsage("", 17, "Bold"),
-                Colour = new Color4(255, 102, 170, 255),
-                Position = new Vector2(10, 5)
-            },
             // No data text
             _noDataText = new SpriteText
             {
@@ -180,13 +172,6 @@ public partial class SkillsOverTimeChart : CompositeDrawable
         DrawPhaseShifts();
         DrawMsdData();
         DrawAccuracyData();
-
-        // Update title
-        var duration = _endTime - _startTime;
-        var durationStr = duration.TotalDays > 30 
-            ? $"{duration.TotalDays / 30:F1} months"
-            : $"{duration.TotalDays:F0} days";
-        _titleText.Text = $"Skills Over Time ({_trendData.Plays.Count} plays, {durationStr})";
     }
 
     private void CalculateRanges()

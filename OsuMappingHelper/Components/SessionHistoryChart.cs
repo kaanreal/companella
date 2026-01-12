@@ -51,7 +51,6 @@ public partial class SessionHistoryChart : CompositeDrawable
     private Container _accuracyLinesContainer = null!;
     private Container _gridContainer = null!;
     private Container _labelsContainer = null!;
-    private SpriteText _titleText = null!;
     private SpriteText _noDataText = null!;
     
     private List<StoredSessionPlay> _data = new();
@@ -69,14 +68,6 @@ public partial class SessionHistoryChart : CompositeDrawable
             {
                 RelativeSizeAxes = Axes.Both,
                 Colour = new Color4(30, 30, 35, 255)
-            },
-            // Title
-            _titleText = new SpriteText
-            {
-                Text = "Session History",
-                Font = new FontUsage("", 17, "Bold"),
-                Colour = new Color4(255, 102, 170, 255),
-                Position = new Vector2(10, 5)
             },
             // No data text
             _noDataText = new SpriteText
@@ -143,16 +134,6 @@ public partial class SessionHistoryChart : CompositeDrawable
     /// </summary>
     public void SetSession(StoredSession? session)
     {
-        if (session == null || session.Plays.Count == 0)
-        {
-            _data.Clear();
-            _titleText.Text = "Session History";
-        }
-        else
-        {
-            _data = session.Plays.ToList();
-            _titleText.Text = $"Session: {session.StartTime.ToLocalTime():MMM dd, HH:mm}";
-        }
         Redraw();
     }
     
@@ -162,7 +143,6 @@ public partial class SessionHistoryChart : CompositeDrawable
     public void Clear()
     {
         _data.Clear();
-        _titleText.Text = "Session History";
         Redraw();
     }
     

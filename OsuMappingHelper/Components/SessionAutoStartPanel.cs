@@ -1,9 +1,11 @@
 using osu.Framework.Allocation;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
+using osu.Framework.Graphics.Cursor;
 using osu.Framework.Graphics.Shapes;
 using osu.Framework.Graphics.Sprites;
 using osu.Framework.Input.Events;
+using osu.Framework.Localisation;
 using osuTK;
 using osuTK.Graphics;
 using OsuMappingHelper.Services;
@@ -46,12 +48,14 @@ public partial class SessionAutoStartPanel : CompositeDrawable
                     _autoStartCheckbox = new SettingsCheckbox
                     {
                         LabelText = "Auto-start session on startup",
-                        IsChecked = SettingsService.Settings.AutoStartSession
+                        IsChecked = SettingsService.Settings.AutoStartSession,
+                        TooltipText = "Automatically start tracking when the app launches"
                     },
                     _autoEndCheckbox = new SettingsCheckbox
                     {
                         LabelText = "Auto-end session on exit",
-                        IsChecked = SettingsService.Settings.AutoEndSession
+                        IsChecked = SettingsService.Settings.AutoEndSession,
+                        TooltipText = "Automatically end and save the session when closing the app"
                     }
                 }
             }
@@ -82,7 +86,7 @@ public partial class SessionAutoStartPanel : CompositeDrawable
 /// <summary>
 /// Simple checkbox control for settings.
 /// </summary>
-public partial class SettingsCheckbox : CompositeDrawable
+public partial class SettingsCheckbox : CompositeDrawable, IHasTooltip
 {
     private Box _checkboxBackground = null!;
     private Box _checkmark = null!;
@@ -90,6 +94,11 @@ public partial class SettingsCheckbox : CompositeDrawable
     private bool _isChecked;
 
     public string LabelText { get; set; } = "Option";
+    
+    /// <summary>
+    /// Tooltip text displayed on hover.
+    /// </summary>
+    public LocalisableString TooltipText { get; set; }
     
     public bool IsChecked
     {

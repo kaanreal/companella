@@ -2,9 +2,11 @@ using osu.Framework.Allocation;
 using osu.Framework.Bindables;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
+using osu.Framework.Graphics.Cursor;
 using osu.Framework.Graphics.Shapes;
 using osu.Framework.Graphics.Sprites;
 using osu.Framework.Input.Events;
+using osu.Framework.Localisation;
 using osuTK;
 using osuTK.Graphics;
 using OsuMappingHelper.Services;
@@ -62,7 +64,10 @@ public partial class TimeRegionSelector : CompositeDrawable
         // Create buttons for each time region
         foreach (TimeRegion region in Enum.GetValues<TimeRegion>())
         {
-            var button = new TimeRegionButton(region, GetRegionLabel(region), _accentColor);
+            var button = new TimeRegionButton(region, GetRegionLabel(region), _accentColor)
+            {
+                TooltipText = GetRegionTooltip(region)
+            };
             button.Clicked += () => OnButtonClicked(region);
             _buttons[region] = button;
             _buttonsContainer.Add(button);
@@ -97,12 +102,24 @@ public partial class TimeRegionSelector : CompositeDrawable
             _ => region.ToString()
         };
     }
+
+    private static string GetRegionTooltip(TimeRegion region)
+    {
+        return region switch
+        {
+            TimeRegion.LastWeek => "Analyze plays from the last 7 days",
+            TimeRegion.LastMonth => "Analyze plays from the last 30 days",
+            TimeRegion.Last3Months => "Analyze plays from the last 3 months",
+            TimeRegion.AllTime => "Analyze all recorded plays",
+            _ => ""
+        };
+    }
 }
 
 /// <summary>
 /// Button for selecting a time region.
 /// </summary>
-public partial class TimeRegionButton : CompositeDrawable
+public partial class TimeRegionButton : CompositeDrawable, IHasTooltip
 {
     private readonly TimeRegion _region;
     private readonly string _label;
@@ -112,6 +129,11 @@ public partial class TimeRegionButton : CompositeDrawable
     private Box _hoverOverlay = null!;
     private SpriteText _text = null!;
     private bool _isSelected;
+
+    /// <summary>
+    /// Tooltip text displayed on hover.
+    /// </summary>
+    public LocalisableString TooltipText { get; set; }
 
     /// <summary>
     /// Event raised when the button is clicked.

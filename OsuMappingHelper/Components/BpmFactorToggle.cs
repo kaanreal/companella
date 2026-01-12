@@ -1,9 +1,11 @@
 using osu.Framework.Allocation;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
+using osu.Framework.Graphics.Cursor;
 using osu.Framework.Graphics.Shapes;
 using osu.Framework.Graphics.Sprites;
 using osu.Framework.Input.Events;
+using osu.Framework.Localisation;
 using osuTK;
 using osuTK.Graphics;
 using OsuMappingHelper.Models;
@@ -80,17 +82,20 @@ public partial class BpmFactorToggle : CompositeDrawable
                     _halfOption = new ToggleOption(BpmFactor.Half)
                     {
                         RelativeSizeAxes = Axes.Y,
-                        Width = 40
+                        Width = 40,
+                        TooltipText = "Halve detected BPM (use if detection doubled the BPM)"
                     },
                     _normalOption = new ToggleOption(BpmFactor.Normal)
                     {
                         RelativeSizeAxes = Axes.Y,
-                        Width = 40
+                        Width = 40,
+                        TooltipText = "Use detected BPM as-is"
                     },
                     _doubleOption = new ToggleOption(BpmFactor.Double)
                     {
                         RelativeSizeAxes = Axes.Y,
-                        Width = 40
+                        Width = 40,
+                        TooltipText = "Double detected BPM (use if detection halved the BPM)"
                     }
                 }
             }
@@ -122,7 +127,7 @@ public partial class BpmFactorToggle : CompositeDrawable
     /// <summary>
     /// Individual toggle option button.
     /// </summary>
-    private partial class ToggleOption : CompositeDrawable
+    private partial class ToggleOption : CompositeDrawable, IHasTooltip
     {
         private readonly BpmFactor _factor;
         private Box _background = null!;
@@ -134,6 +139,11 @@ public partial class BpmFactorToggle : CompositeDrawable
         private readonly Color4 _selectedColor = new Color4(255, 102, 170, 255);
         private readonly Color4 _hoverColor = new Color4(70, 70, 85, 255);
         private readonly Color4 _disabledColor = new Color4(40, 40, 48, 255);
+
+        /// <summary>
+        /// Tooltip text displayed on hover.
+        /// </summary>
+        public LocalisableString TooltipText { get; set; }
 
         public event Action<BpmFactor>? Selected;
 

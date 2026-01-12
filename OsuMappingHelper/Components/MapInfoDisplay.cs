@@ -336,9 +336,6 @@ public partial class MapInfoDisplay : CompositeDrawable
         UpdateDifficultyStats(osuFile);
 
         // Timing points stats
-        var uninheritedCount = osuFile.TimingPoints.Count(tp => tp.Uninherited);
-        var inheritedCount = osuFile.TimingPoints.Count(tp => !tp.Uninherited);
-        
         // Get BPM range
         var bpms = osuFile.TimingPoints
             .Where(tp => tp.Uninherited && tp.BeatLength > 0)
@@ -355,7 +352,20 @@ public partial class MapInfoDisplay : CompositeDrawable
                 : $"{minBpm:F0}-{maxBpm:F0} BPM";
         }
         
-        _timingStatsText.Text = $"{bpmInfo}  |  {uninheritedCount} timing, {inheritedCount} SV points";
+        // Calculate LN% for mania maps
+        string lnInfo = "";
+        if (osuFile.Mode == 3) // osu!mania
+        {
+            var hitObjects = PatternFinder.ParseHitObjects(osuFile);
+            if (hitObjects.Count > 0)
+            {
+                int lnCount = hitObjects.Count(h => h.Type == HitObjectType.Hold);
+                double lnPercent = (double)lnCount / hitObjects.Count * 100;
+                lnInfo = $"  |  {lnPercent:F0}% LN";
+            }
+        }
+        
+        _timingStatsText.Text = $"{bpmInfo}{lnInfo}";
 
         // Beatmap ID info
         var idParts = new List<string>();
@@ -382,7 +392,6 @@ public partial class MapInfoDisplay : CompositeDrawable
     {
         var statsParts = new List<string>
         {
-            osuFile.ModeName,
             $"OD {osuFile.OverallDifficulty:F1}",
             $"HP {osuFile.HPDrainRate:F1}"
         };
@@ -390,7 +399,7 @@ public partial class MapInfoDisplay : CompositeDrawable
         // Add YAVSRG difficulty if available
         if (_yavsrgDifficulty.HasValue)
         {
-            statsParts.Add($"{_yavsrgDifficulty.Value:F2}*");
+            statsParts.Add($"{_yavsrgDifficulty.Value:F2} Interlude");
         }
         
         _difficultyStatsText.Text = string.Join("  |  ", statsParts);

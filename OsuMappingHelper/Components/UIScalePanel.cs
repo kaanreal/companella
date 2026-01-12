@@ -2,10 +2,12 @@ using osu.Framework.Allocation;
 using osu.Framework.Bindables;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
+using osu.Framework.Graphics.Cursor;
 using osu.Framework.Graphics.Shapes;
 using osu.Framework.Graphics.Sprites;
 using osu.Framework.Graphics.UserInterface;
 using osu.Framework.Input.Events;
+using osu.Framework.Localisation;
 using osuTK;
 using osuTK.Graphics;
 using OsuMappingHelper.Services;
@@ -205,7 +207,8 @@ public partial class UIScalePanel : CompositeDrawable
             Action = () =>
             {
                 _scaleBindable.Value = scale;
-            }
+            },
+            TooltipText = $"Set window scale to {scale * 100:0}%"
         };
     }
 
@@ -241,9 +244,14 @@ public partial class UIScalePanel : CompositeDrawable
     /// <summary>
     /// Preset scale button.
     /// </summary>
-    private partial class PresetScaleButton : CompositeDrawable
+    private partial class PresetScaleButton : CompositeDrawable, IHasTooltip
     {
         public Action? Action { get; set; }
+        
+        /// <summary>
+        /// Tooltip text displayed on hover.
+        /// </summary>
+        public LocalisableString TooltipText { get; set; }
 
         private readonly string _label;
         private readonly float _scale;

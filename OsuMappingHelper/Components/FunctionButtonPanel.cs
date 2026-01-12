@@ -62,7 +62,8 @@ public partial class FunctionButtonPanel : CompositeDrawable
                             {
                                 Width = 100,
                                 Height = 32,
-                                Enabled = false
+                                Enabled = false,
+                                TooltipText = "Detect BPM from audio and generate timing points"
                             },
                             _bpmFactorToggle = new BpmFactorToggle
                             {
@@ -73,7 +74,8 @@ public partial class FunctionButtonPanel : CompositeDrawable
                             {
                                 Width = 100,
                                 Height = 32,
-                                Enabled = false
+                                Enabled = false,
+                                TooltipText = "Convert variable BPM to constant BPM with SV compensation"
                             }
                         }
                     }

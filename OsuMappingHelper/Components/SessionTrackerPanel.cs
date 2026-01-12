@@ -1,9 +1,11 @@
 using osu.Framework.Allocation;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
+using osu.Framework.Graphics.Cursor;
 using osu.Framework.Graphics.Shapes;
 using osu.Framework.Graphics.Sprites;
 using osu.Framework.Input.Events;
+using osu.Framework.Localisation;
 using osuTK;
 using osuTK.Graphics;
 using OsuMappingHelper.Models;
@@ -66,7 +68,8 @@ public partial class SessionTrackerPanel : CompositeDrawable
                             // Start/Stop button
                             _toggleButton = new SessionToggleButton
                             {
-                                Size = new Vector2(120, 36)
+                                Size = new Vector2(120, 36),
+                                TooltipText = "Track your plays and view progress over time"
                             },
                             // Stats display
                             new FillFlowContainer
@@ -211,7 +214,7 @@ public partial class SessionTrackerPanel : CompositeDrawable
 /// <summary>
 /// Toggle button for starting/stopping session tracking.
 /// </summary>
-public partial class SessionToggleButton : CompositeDrawable
+public partial class SessionToggleButton : CompositeDrawable, IHasTooltip
 {
     private Box _background = null!;
     private Box _hoverOverlay = null!;
@@ -221,6 +224,11 @@ public partial class SessionToggleButton : CompositeDrawable
     private readonly Color4 _startColor = new Color4(100, 200, 100, 255);
     private readonly Color4 _stopColor = new Color4(200, 100, 100, 255);
     private readonly Color4 _hoverTint = new Color4(255, 255, 255, 40);
+    
+    /// <summary>
+    /// Tooltip text displayed on hover.
+    /// </summary>
+    public LocalisableString TooltipText { get; set; }
     
     public event Action? Clicked;
     

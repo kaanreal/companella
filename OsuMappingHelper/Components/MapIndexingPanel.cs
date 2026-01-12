@@ -2,9 +2,11 @@ using osu.Framework.Allocation;
 using osu.Framework.Bindables;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
+using osu.Framework.Graphics.Cursor;
 using osu.Framework.Graphics.Shapes;
 using osu.Framework.Graphics.Sprites;
 using osu.Framework.Input.Events;
+using osu.Framework.Localisation;
 using osuTK;
 using osuTK.Graphics;
 using OsuMappingHelper.Services;
@@ -82,21 +84,24 @@ public partial class MapIndexingPanel : CompositeDrawable
                                 Width = 90,
                                 Height = 28,
                                 ButtonText = "Index Maps",
-                                ButtonColor = _primaryButtonColor
+                                ButtonColor = _primaryButtonColor,
+                                TooltipText = "Scan osu! Songs folder to enable map recommendations"
                             },
                             _reindexButton = new IndexButton
                             {
                                 Width = 100,
                                 Height = 28,
                                 ButtonText = "Reindex Maps",
-                                ButtonColor = _warningButtonColor
+                                ButtonColor = _warningButtonColor,
+                                TooltipText = "Clear and rebuild the entire map index"
                             },
                             _refreshButton = new IndexButton
                             {
                                 Width = 110,
                                 Height = 28,
                                 ButtonText = "Refresh All MSD",
-                                ButtonColor = _secondaryButtonColor
+                                ButtonColor = _secondaryButtonColor,
+                                TooltipText = "Recalculate difficulty ratings for all indexed maps"
                             }
                         }
                     },
@@ -245,7 +250,7 @@ public partial class MapIndexingPanel : CompositeDrawable
 /// <summary>
 /// Button used in the map indexing panel.
 /// </summary>
-public partial class IndexButton : CompositeDrawable
+public partial class IndexButton : CompositeDrawable, IHasTooltip
 {
     private Box _background = null!;
     private Box _hoverOverlay = null!;
@@ -254,6 +259,11 @@ public partial class IndexButton : CompositeDrawable
     public string ButtonText { get; set; } = "Button";
     public Color4 ButtonColor { get; set; } = new Color4(80, 150, 200, 255);
     public readonly BindableBool Enabled = new BindableBool(true);
+    
+    /// <summary>
+    /// Tooltip text displayed on hover.
+    /// </summary>
+    public LocalisableString TooltipText { get; set; }
     
     public event Action? Clicked;
 
