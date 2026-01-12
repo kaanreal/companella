@@ -203,7 +203,7 @@ fn calculate_msd_at_rate(calc: &Calc, path: &PathBuf, rate: f32) -> Result<Skill
         .map_err(|e| format!("Failed to decode {:?}: {}", path, e))?;
     
     // Get keycount from chart
-    let keycount = chart.key_count as u32;
+    let keycount = chart.key_count() as u32;
     if keycount != 4 && keycount != 6 && keycount != 7 {
         return Err(format!("Unsupported key count: {}. Only 4K, 6K, and 7K are supported.", keycount).into());
     }
