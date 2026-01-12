@@ -14,7 +14,8 @@ path = "src/main.rs"
 minacalc-rs = { path = "../minacalc-rs", features = ["rox", "hashmap", "utils"] }
 
 # rhythm-open-exchange for chart loading (used by rox feature)
-rhythm-open-exchange = "0.2.2"
+# Must match the version used by minacalc-rs to avoid type conflicts
+rhythm-open-exchange = "0.3.3"
 
 # CLI argument parsing
 clap = { version = "4.4", features = ["derive"] }
