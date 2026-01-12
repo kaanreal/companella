@@ -278,10 +278,12 @@ public partial class PatternDisplay : CompositeDrawable
     /// </summary>
     public void SetMsdScores(SkillsetScores scores)
     {
+        // Always store the scores for classification
+        _pendingMsdScores = scores;
+
         if (_currentPatternResult == null)
         {
-            // Patterns haven't arrived yet, store MSD scores for when they do
-            _pendingMsdScores = scores;
+            // Patterns haven't arrived yet, scores stored for when they do
             return;
         }
 
@@ -314,21 +316,22 @@ public partial class PatternDisplay : CompositeDrawable
         {
             try
             {
-                if (DanConfigService == null || !DanConfigService.IsLoaded)
+                // Allow classification if either ONNX model OR dans.json is loaded
+                if (DanConfigService == null || (!DanConfigService.IsModelLoaded && !DanConfigService.IsLoaded))
                 {
                     Schedule(() =>
                     {
                         _classifierValue.Text = "?";
-                        _classifierDetail.Text = "Config not loaded";
+                        _classifierDetail.Text = "No model or config";
                     });
                     return;
                 }
 
-                // Use a local copy to avoid race conditions
-                var topPatterns = _currentTopPatterns.ToList();
+                // Use local copies to avoid race conditions
+                var msdScores = _pendingMsdScores;
                 var osuFile = _currentOsuFile;
 
-                var result = DanConfigService.ClassifyMap(topPatterns, osuFile);
+                var result = DanConfigService.ClassifyMap(msdScores, osuFile);
 
                 Schedule(() =>
                 {
@@ -398,27 +401,16 @@ public partial class PatternDisplay : CompositeDrawable
         // Update display
         _classifierValue.Text = result.DisplayName;
         
-        // Build detail string showing pattern, variant (Low/High), and YAVSRG rating
+        // Build detail string showing raw model output and skillset
         var details = new List<string>();
-        if (!string.IsNullOrEmpty(result.DominantPattern))
+        
+        // Show raw model output if available (from ONNX model)
+        if (result.RawModelOutput.HasValue)
         {
-            details.Add(result.DominantPattern);
-        }
-        // Add variant tag if present
-        if (!string.IsNullOrEmpty(result.Variant))
-        {
-            details.Add($"[{result.Variant}]");
-        }
-        if (result.YavsrgRating > 0)
-        {
-            details.Add($"{result.YavsrgRating:F2}*");
-        }
-        if (result.TargetRating > 0)
-        {
-            details.Add($"(target: {result.TargetRating:F2})");
+            details.Add($"Raw: {result.RawModelOutput.Value:F2}");
         }
         
-        _classifierDetail.Text = string.Join(" ", details);
+        _classifierDetail.Text = string.Join(" | ", details);
 
         // Color based on confidence
         _classifierValue.Colour = result.Confidence > 0.7 
