@@ -16,6 +16,12 @@ public class MarathonEntry
     public bool IsPause { get; set; }
 
     /// <summary>
+    /// Whether this entry is locked (cannot be moved, edited, or deleted).
+    /// Used for automatic boundary breaks at start and end of marathon.
+    /// </summary>
+    public bool IsLocked { get; set; }
+
+    /// <summary>
     /// Duration of the pause in seconds (only used when IsPause is true).
     /// </summary>
     public double PauseDurationSeconds { get; set; }
@@ -139,6 +145,30 @@ public class MarathonEntry
         return new MarathonEntry
         {
             IsPause = true,
+            IsLocked = false,
+            PauseDurationSeconds = Math.Max(0.1, durationSeconds),
+            OsuFile = null,
+            Rate = 1.0,
+            DominantBpm = 0,
+            MsdValues = null,
+            FileHash = string.Empty,
+            FirstNoteTime = 0,
+            LastNoteEndTime = 0
+        };
+    }
+
+    /// <summary>
+    /// Creates a locked boundary break entry (cannot be moved, edited, or deleted).
+    /// Used for automatic breaks at the start and end of marathons.
+    /// </summary>
+    /// <param name="durationSeconds">Duration of the break in seconds.</param>
+    /// <returns>A new locked MarathonEntry representing a boundary break.</returns>
+    public static MarathonEntry CreateLockedBreak(double durationSeconds)
+    {
+        return new MarathonEntry
+        {
+            IsPause = true,
+            IsLocked = true,
             PauseDurationSeconds = Math.Max(0.1, durationSeconds),
             OsuFile = null,
             Rate = 1.0,

@@ -1,5 +1,6 @@
 using System.Globalization;
 using osu.Framework.Allocation;
+using osu.Framework.Bindables;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
 using osu.Framework.Graphics.Cursor;
@@ -13,6 +14,7 @@ using osuTK.Graphics;
 using Companella.Services.Tools;
 using TextBox = osu.Framework.Graphics.UserInterface.TextBox;
 using Companella.Components.Session;
+using osu.Framework.Extensions.Color4Extensions;
 
 namespace Companella.Components.Tools;
 
@@ -28,13 +30,15 @@ public partial class RateChangerPanel : CompositeDrawable
     private SpriteText _previewText = null!;
     private SpriteText _currentBpmLabel = null!;
     private FillFlowContainer _quickRateButtons = null!;
-    private ModeToggleButton _rateModeButton = null!;
-    private ModeToggleButton _bpmModeButton = null!;
     private SettingsCheckbox _pitchAdjustCheckbox = null!;
-    private Container _rateInputContainer = null!;
-    private Container _bpmInputContainer = null!;
+    private BasicSliderBar<double> _odSlider = null!;
+    private BasicSliderBar<double> _hpSlider = null!;
+    private SpriteText _odValueText = null!;
+    private SpriteText _hpValueText = null!;
+    private LockButton _odLockButton = null!;
+    private LockButton _hpLockButton = null!;
 
-    public event Action<double, string, bool>? ApplyRateClicked;
+    public event Action<double, string, bool, double, double>? ApplyRateClicked;
     public event Action<string>? FormatChanged;
     public event Action<double, string>? PreviewRequested;
     public event Action<bool>? PitchAdjustChanged;
@@ -42,8 +46,11 @@ public partial class RateChangerPanel : CompositeDrawable
     private double _currentRate = 1.0;
     private double _currentMapBpm = 120.0;
     private double _targetBpm = 120.0;
-    private bool _isTargetBpmMode = false;
     private bool _pitchAdjust = true;
+    private double _currentOd = 8.0;
+    private double _currentHp = 8.0;
+    private bool _odLocked = false;
+    private bool _hpLocked = false;
     private string _currentFormat = RateChanger.DefaultNameFormat;
 
     private readonly Color4 _accentColor = new Color4(255, 102, 170, 255);
@@ -67,41 +74,6 @@ public partial class RateChangerPanel : CompositeDrawable
                 Spacing = new Vector2(0, 12),
                 Children = new Drawable[]
                 {
-                    // Mode Toggle Section
-                    CreateSection("Mode", new Drawable[]
-                    {
-                        new FillFlowContainer
-                        {
-                            RelativeSizeAxes = Axes.X,
-                            AutoSizeAxes = Axes.Y,
-                            Direction = FillDirection.Horizontal,
-                            Spacing = new Vector2(6, 0),
-                            Children = new Drawable[]
-                            {
-                                _rateModeButton = new ModeToggleButton("Rate", true, _accentColor)
-                                {
-                                    Size = new Vector2(80, 28),
-                                    Action = () => SetMode(isTargetBpmMode: false),
-                                    TooltipText = "Enter rate as a multiplier (e.g., 1.2x)"
-                                },
-                                _bpmModeButton = new ModeToggleButton("Target BPM", false, _accentColor)
-                                {
-                                    Size = new Vector2(100, 28),
-                                    Action = () => SetMode(isTargetBpmMode: true),
-                                    TooltipText = "Enter target BPM and calculate rate automatically"
-                                },
-                                _currentBpmLabel = new SpriteText
-                                {
-                                    Text = "(Current: --)",
-                                    Font = new FontUsage("", 15),
-                                    Colour = new Color4(100, 100, 100, 255),
-                                    Anchor = Anchor.CentreLeft,
-                                    Origin = Anchor.CentreLeft,
-                                    Margin = new MarginPadding { Left = 8 }
-                                }
-                            }
-                        }
-                    }),
                     // Pitch Adjust Checkbox
                     _pitchAdjustCheckbox = new SettingsCheckbox
                     {
@@ -109,90 +81,184 @@ public partial class RateChangerPanel : CompositeDrawable
                         IsChecked = true,
                         TooltipText = "When unchecked, preserves original pitch (nightcore-style)"
                     },
-                    // Rate Selection Section (shown in Rate mode)
-                    _rateInputContainer = new Container
+                    // OD/HP Sliders Section
+                    CreateSection("Difficulty Settings", new Drawable[]
                     {
-                        RelativeSizeAxes = Axes.X,
-                        AutoSizeAxes = Axes.Y,
-                        Child = CreateSection("Rate", new Drawable[]
+                        // OD Slider Row
+                        new Container
                         {
-                            // Quick rate buttons
-                            _quickRateButtons = new FillFlowContainer
+                            RelativeSizeAxes = Axes.X,
+                            Height = 28,
+                            Children = new Drawable[]
                             {
-                                RelativeSizeAxes = Axes.X,
-                                AutoSizeAxes = Axes.Y,
-                                Direction = FillDirection.Horizontal,
-                                Spacing = new Vector2(6, 6),
-                                Children = CreateQuickRateButtons()
-                            },
-                            // Custom rate input
-                            new FillFlowContainer
-                            {
-                                RelativeSizeAxes = Axes.X,
-                                AutoSizeAxes = Axes.Y,
-                                Direction = FillDirection.Horizontal,
-                                Spacing = new Vector2(8, 0),
-                                Margin = new MarginPadding { Top = 8 },
-                                Children = new Drawable[]
+                                new SpriteText
                                 {
-                                    new SpriteText
+                                    Text = "OD",
+                                    Font = new FontUsage("", 15),
+                                    Colour = new Color4(140, 140, 140, 255),
+                                    Anchor = Anchor.CentreLeft,
+                                    Origin = Anchor.CentreLeft,
+                                    Width = 25
+                                },
+                                new Container
+                                {
+                                    RelativeSizeAxes = Axes.X,
+                                    Height = 20,
+                                    Anchor = Anchor.CentreLeft,
+                                    Origin = Anchor.CentreLeft,
+                                    Padding = new MarginPadding { Left = 30, Right = 80 },
+                                    Child = _odSlider = new BasicSliderBar<double>
                                     {
-                                        Text = "Custom:",
-                                        Font = new FontUsage("", 16),
-                                        Colour = new Color4(140, 140, 140, 255),
+                                        RelativeSizeAxes = Axes.X,
+                                        Height = 20,
                                         Anchor = Anchor.CentreLeft,
-                                        Origin = Anchor.CentreLeft
-                                    },
-                                    _rateTextBox = new StyledTextBox
-                                    {
-                                        Size = new Vector2(80, 32),
-                                        PlaceholderText = "1.0"
-                                    },
-                                    new SpriteText
-                                    {
-                                        Text = "x",
-                                        Font = new FontUsage("", 17),
-                                        Colour = new Color4(100, 100, 100, 255),
-                                        Anchor = Anchor.CentreLeft,
-                                        Origin = Anchor.CentreLeft
+                                        Origin = Anchor.CentreLeft,
+                                        Current = new BindableDouble(8.0) { MinValue = 0, MaxValue = 10, Precision = 0.1 },
+                                        BackgroundColour = new Color4(40, 40, 45, 255),
+                                        SelectionColour = _accentColor
                                     }
+                                },
+                                _odValueText = new SpriteText
+                                {
+                                    Text = "8.0",
+                                    Font = new FontUsage("", 15),
+                                    Colour = new Color4(200, 200, 200, 255),
+                                    Anchor = Anchor.CentreRight,
+                                    Origin = Anchor.CentreRight,
+                                    Margin = new MarginPadding { Right = 35 }
+                                },
+                                _odLockButton = new LockButton
+                                {
+                                    Size = new Vector2(24, 24),
+                                    Anchor = Anchor.CentreRight,
+                                    Origin = Anchor.CentreRight,
+                                    TooltipText = "Lock OD value when changing maps"
                                 }
                             }
-                        })
-                    },
-                    // Target BPM Section (shown in Target BPM mode)
-                    _bpmInputContainer = new Container
-                    {
-                        RelativeSizeAxes = Axes.X,
-                        AutoSizeAxes = Axes.Y,
-                        Alpha = 0,
-                        Child = CreateSection("Target BPM", new Drawable[]
+                        },
+                        // HP Slider Row
+                        new Container
                         {
-                            new FillFlowContainer
+                            RelativeSizeAxes = Axes.X,
+                            Height = 28,
+                            Margin = new MarginPadding { Top = 4 },
+                            Children = new Drawable[]
                             {
-                                RelativeSizeAxes = Axes.X,
-                                AutoSizeAxes = Axes.Y,
-                                Direction = FillDirection.Horizontal,
-                                Spacing = new Vector2(8, 0),
-                                Children = new Drawable[]
+                                new SpriteText
                                 {
-                                    _targetBpmTextBox = new StyledTextBox
+                                    Text = "HP",
+                                    Font = new FontUsage("", 15),
+                                    Colour = new Color4(140, 140, 140, 255),
+                                    Anchor = Anchor.CentreLeft,
+                                    Origin = Anchor.CentreLeft,
+                                    Width = 25
+                                },
+                                new Container
+                                {
+                                    RelativeSizeAxes = Axes.X,
+                                    Height = 20,
+                                    Anchor = Anchor.CentreLeft,
+                                    Origin = Anchor.CentreLeft,
+                                    Padding = new MarginPadding { Left = 30, Right = 80 },
+                                    Child = _hpSlider = new BasicSliderBar<double>
                                     {
-                                        Size = new Vector2(100, 32),
-                                        PlaceholderText = "120"
-                                    },
-                                    new SpriteText
-                                    {
-                                        Text = "BPM",
-                                        Font = new FontUsage("", 17),
-                                        Colour = new Color4(100, 100, 100, 255),
+                                        RelativeSizeAxes = Axes.X,
+                                        Height = 20,
                                         Anchor = Anchor.CentreLeft,
-                                        Origin = Anchor.CentreLeft
+                                        Origin = Anchor.CentreLeft,
+                                        Current = new BindableDouble(8.0) { MinValue = 0, MaxValue = 10, Precision = 0.1 },
+                                        BackgroundColour = new Color4(40, 40, 45, 255),
+                                        SelectionColour = _accentColor
                                     }
+                                },
+                                _hpValueText = new SpriteText
+                                {
+                                    Text = "8.0",
+                                    Font = new FontUsage("", 15),
+                                    Colour = new Color4(200, 200, 200, 255),
+                                    Anchor = Anchor.CentreRight,
+                                    Origin = Anchor.CentreRight,
+                                    Margin = new MarginPadding { Right = 35 }
+                                },
+                                _hpLockButton = new LockButton
+                                {
+                                    Size = new Vector2(24, 24),
+                                    Anchor = Anchor.CentreRight,
+                                    Origin = Anchor.CentreRight,
+                                    TooltipText = "Lock HP value when changing maps"
                                 }
                             }
-                        })
-                    },
+                        }
+                    }),
+                    // Rate Selection Section
+                    CreateSection("Rate", new Drawable[]
+                    {
+                        // Quick rate buttons
+                        _quickRateButtons = new FillFlowContainer
+                        {
+                            RelativeSizeAxes = Axes.X,
+                            AutoSizeAxes = Axes.Y,
+                            Direction = FillDirection.Horizontal,
+                            Spacing = new Vector2(6, 6),
+                            Children = CreateQuickRateButtons()
+                        },
+                        // Custom rate input + Target BPM input on same row
+                        new FillFlowContainer
+                        {
+                            RelativeSizeAxes = Axes.X,
+                            AutoSizeAxes = Axes.Y,
+                            Direction = FillDirection.Horizontal,
+                            Spacing = new Vector2(8, 0),
+                            Margin = new MarginPadding { Top = 8 },
+                            Children = new Drawable[]
+                            {
+                                new SpriteText
+                                {
+                                    Text = "Custom:",
+                                    Font = new FontUsage("", 16),
+                                    Colour = new Color4(140, 140, 140, 255),
+                                    Anchor = Anchor.CentreLeft,
+                                    Origin = Anchor.CentreLeft
+                                },
+                                _rateTextBox = new StyledTextBox
+                                {
+                                    Size = new Vector2(70, 32),
+                                    PlaceholderText = "1.0"
+                                },
+                                new SpriteText
+                                {
+                                    Text = "x",
+                                    Font = new FontUsage("", 17),
+                                    Colour = new Color4(100, 100, 100, 255),
+                                    Anchor = Anchor.CentreLeft,
+                                    Origin = Anchor.CentreLeft
+                                },
+                                new SpriteText
+                                {
+                                    Text = "Target BPM:",
+                                    Font = new FontUsage("", 16),
+                                    Colour = new Color4(140, 140, 140, 255),
+                                    Anchor = Anchor.CentreLeft,
+                                    Origin = Anchor.CentreLeft,
+                                    Margin = new MarginPadding { Left = 12 }
+                                },
+                                _targetBpmTextBox = new StyledTextBox
+                                {
+                                    Size = new Vector2(70, 32),
+                                    PlaceholderText = "120"
+                                },
+                                _currentBpmLabel = new SpriteText
+                                {
+                                    Text = "(Current: --)",
+                                    Font = new FontUsage("", 14),
+                                    Colour = new Color4(100, 100, 100, 255),
+                                    Anchor = Anchor.CentreLeft,
+                                    Origin = Anchor.CentreLeft,
+                                    Margin = new MarginPadding { Left = 4 }
+                                }
+                            }
+                        }
+                    }),
                     // Format Section
                     CreateSection("Difficulty Name Format", new Drawable[]
                     {
@@ -268,12 +334,42 @@ public partial class RateChangerPanel : CompositeDrawable
         _formatTextBox.OnCommit += OnFormatTextCommit;
         _applyButton.Clicked += OnApplyClicked;
         _pitchAdjustCheckbox.CheckedChanged += OnPitchAdjustChanged;
+        
+        // OD/HP slider events
+        _odSlider.Current.ValueChanged += e => OnOdSliderChanged(e.NewValue);
+        _hpSlider.Current.ValueChanged += e => OnHpSliderChanged(e.NewValue);
+        _odLockButton.LockChanged += OnOdLockChanged;
+        _hpLockButton.LockChanged += OnHpLockChanged;
     }
 
     private void OnPitchAdjustChanged(bool isChecked)
     {
         _pitchAdjust = isChecked;
         PitchAdjustChanged?.Invoke(isChecked);
+    }
+
+    private void OnOdSliderChanged(double value)
+    {
+        _currentOd = value;
+        _odValueText.Text = value.ToString("0.0", CultureInfo.InvariantCulture);
+    }
+
+    private void OnHpSliderChanged(double value)
+    {
+        _currentHp = value;
+        _hpValueText.Text = value.ToString("0.0", CultureInfo.InvariantCulture);
+    }
+
+    private void OnOdLockChanged(bool isLocked)
+    {
+        _odLocked = isLocked;
+        _odSlider.Alpha = isLocked ? 0.5f : 1.0f;
+    }
+
+    private void OnHpLockChanged(bool isLocked)
+    {
+        _hpLocked = isLocked;
+        _hpSlider.Alpha = isLocked ? 0.5f : 1.0f;
     }
 
     private Drawable[] CreateQuickRateButtons()
@@ -336,6 +432,14 @@ public partial class RateChangerPanel : CompositeDrawable
     {
         _currentRate = rate;
         _rateTextBox.Text = rate.ToString("0.0#", CultureInfo.InvariantCulture);
+        
+        // Update target BPM based on new rate
+        if (_currentMapBpm > 0)
+        {
+            _targetBpm = _currentMapBpm * _currentRate;
+            _targetBpmTextBox.Text = _targetBpm.ToString("0.#", CultureInfo.InvariantCulture);
+        }
+        
         UpdateQuickRateButtonSelection(rate);
         UpdatePreview();
     }
@@ -362,6 +466,14 @@ public partial class RateChangerPanel : CompositeDrawable
         {
             sender.Text = _currentRate.ToString("0.0#", CultureInfo.InvariantCulture);
         }
+        
+        // Update target BPM based on new rate
+        if (_currentMapBpm > 0)
+        {
+            _targetBpm = _currentMapBpm * _currentRate;
+            _targetBpmTextBox.Text = _targetBpm.ToString("0.#", CultureInfo.InvariantCulture);
+        }
+        
         UpdateQuickRateButtonSelection(_currentRate);
         UpdatePreview();
     }
@@ -373,10 +485,12 @@ public partial class RateChangerPanel : CompositeDrawable
             _targetBpm = Math.Clamp(value, 10, 1000);
             sender.Text = _targetBpm.ToString("0.#", CultureInfo.InvariantCulture);
             
-            // Calculate rate from target BPM
+            // Calculate rate from target BPM and update rate textbox
             if (_currentMapBpm > 0)
             {
                 _currentRate = Math.Clamp(_targetBpm / _currentMapBpm, 0.1, 5.0);
+                _rateTextBox.Text = _currentRate.ToString("0.0#", CultureInfo.InvariantCulture);
+                UpdateQuickRateButtonSelection(_currentRate);
             }
         }
         else
@@ -387,49 +501,18 @@ public partial class RateChangerPanel : CompositeDrawable
     }
 
     /// <summary>
-    /// Sets the mode (Rate or Target BPM).
-    /// </summary>
-    private void SetMode(bool isTargetBpmMode)
-    {
-        if (_isTargetBpmMode == isTargetBpmMode) return;
-        
-        _isTargetBpmMode = isTargetBpmMode;
-        
-        _rateModeButton.SetSelected(!isTargetBpmMode);
-        _bpmModeButton.SetSelected(isTargetBpmMode);
-        
-        if (isTargetBpmMode)
-        {
-            _rateInputContainer.FadeOut(150);
-            _bpmInputContainer.FadeIn(150);
-            
-            // Initialize target BPM from current rate
-            _targetBpm = _currentMapBpm * _currentRate;
-            _targetBpmTextBox.Text = _targetBpm.ToString("0.#", CultureInfo.InvariantCulture);
-        }
-        else
-        {
-            _rateInputContainer.FadeIn(150);
-            _bpmInputContainer.FadeOut(150);
-        }
-        
-        UpdatePreview();
-    }
-
-    /// <summary>
     /// Sets the current map's BPM for target BPM calculations.
     /// </summary>
     public void SetCurrentMapBpm(double bpm)
     {
         _currentMapBpm = bpm > 0 ? bpm : 120;
-        _currentBpmLabel.Text = $"(Current: {_currentMapBpm:0.#} BPM)";
+        _currentBpmLabel.Text = $"(Current: {_currentMapBpm:0.#})";
         
-        // If in target BPM mode, recalculate rate
-        if (_isTargetBpmMode && _currentMapBpm > 0)
-        {
-            _currentRate = Math.Clamp(_targetBpm / _currentMapBpm, 0.1, 5.0);
-            UpdatePreview();
-        }
+        // Update target BPM based on current rate
+        _targetBpm = _currentMapBpm * _currentRate;
+        _targetBpmTextBox.Text = _targetBpm.ToString("0.#", CultureInfo.InvariantCulture);
+        
+        UpdatePreview();
     }
 
     private void OnFormatTextCommit(TextBox sender, bool newText)
@@ -451,7 +534,7 @@ public partial class RateChangerPanel : CompositeDrawable
 
     private void OnApplyClicked()
     {
-        ApplyRateClicked?.Invoke(_currentRate, _currentFormat, _pitchAdjust);
+        ApplyRateClicked?.Invoke(_currentRate, _currentFormat, _pitchAdjust, _currentOd, _currentHp);
     }
 
     /// <summary>
@@ -491,6 +574,26 @@ public partial class RateChangerPanel : CompositeDrawable
     }
 
     public string CurrentFormat => _currentFormat;
+
+    /// <summary>
+    /// Updates OD/HP values from the current map (unless locked).
+    /// </summary>
+    public void SetMapDifficultyValues(double od, double hp)
+    {
+        if (!_odLocked)
+        {
+            _currentOd = od;
+            _odSlider.Current.Value = od;
+            _odValueText.Text = od.ToString("0.0", CultureInfo.InvariantCulture);
+        }
+        
+        if (!_hpLocked)
+        {
+            _currentHp = hp;
+            _hpSlider.Current.Value = hp;
+            _hpValueText.Text = hp.ToString("0.0", CultureInfo.InvariantCulture);
+        }
+    }
 }
 
 /// <summary>
@@ -545,99 +648,6 @@ public partial class QuickRateButton : CompositeDrawable, IHasTooltip
             _label = new SpriteText
             {
                 Text = $"{Rate:0.0#}x",
-                Font = new FontUsage("", 12, _isSelected ? "Bold" : ""),
-                Colour = _isSelected ? Color4.White : new Color4(180, 180, 180, 255),
-                Anchor = Anchor.Centre,
-                Origin = Anchor.Centre
-            }
-        };
-    }
-
-    public void SetSelected(bool selected)
-    {
-        _isSelected = selected;
-        _background.FadeColour(_isSelected ? _selectedBg : _normalBg, 150);
-        _label.FadeColour(_isSelected ? Color4.White : new Color4(180, 180, 180, 255), 150);
-        _label.Font = new FontUsage("", 12, _isSelected ? "Bold" : "");
-    }
-
-    protected override bool OnHover(HoverEvent e)
-    {
-        if (!_isSelected)
-        {
-            _hoverOverlay.FadeTo(0.1f, 100);
-            _background.FadeColour(_hoverBg, 100);
-        }
-        return base.OnHover(e);
-    }
-
-    protected override void OnHoverLost(HoverLostEvent e)
-    {
-        _hoverOverlay.FadeTo(0, 100);
-        if (!_isSelected)
-            _background.FadeColour(_normalBg, 100);
-        base.OnHoverLost(e);
-    }
-
-    protected override bool OnClick(ClickEvent e)
-    {
-        Action?.Invoke();
-        return true;
-    }
-}
-
-/// <summary>
-/// Toggle button for mode selection (Rate vs Target BPM).
-/// </summary>
-public partial class ModeToggleButton : CompositeDrawable, IHasTooltip
-{
-    public Action? Action { get; set; }
-
-    /// <summary>
-    /// Tooltip text displayed on hover.
-    /// </summary>
-    public LocalisableString TooltipText { get; set; }
-
-    private bool _isSelected;
-    private Box _background = null!;
-    private Box _hoverOverlay = null!;
-    private SpriteText _label = null!;
-    private readonly string _text;
-    private readonly Color4 _accentColor;
-
-    private readonly Color4 _normalBg = new Color4(45, 45, 50, 255);
-    private readonly Color4 _selectedBg = new Color4(255, 102, 170, 255);
-    private readonly Color4 _hoverBg = new Color4(60, 60, 65, 255);
-
-    public ModeToggleButton(string text, bool isSelected, Color4 accentColor)
-    {
-        _text = text;
-        _isSelected = isSelected;
-        _accentColor = accentColor;
-    }
-
-    [BackgroundDependencyLoader]
-    private void load()
-    {
-        Masking = true;
-        CornerRadius = 4;
-
-        InternalChildren = new Drawable[]
-        {
-            _background = new Box
-            {
-                RelativeSizeAxes = Axes.Both,
-                Colour = _isSelected ? _selectedBg : _normalBg
-            },
-            _hoverOverlay = new Box
-            {
-                RelativeSizeAxes = Axes.Both,
-                Colour = Color4.White,
-                Alpha = 0
-            },
-            _label = new SpriteText
-            {
-                Text = _text,
                 Font = new FontUsage("", 12, _isSelected ? "Bold" : ""),
                 Colour = _isSelected ? Color4.White : new Color4(180, 180, 180, 255),
                 Anchor = Anchor.Centre,
@@ -802,6 +812,83 @@ public partial class ModernButton : CompositeDrawable, IHasTooltip
             Clicked?.Invoke();
             _hoverOverlay.FadeTo(0.3f, 50).Then().FadeTo(0.15f, 100);
         }
+        return true;
+    }
+}
+
+/// <summary>
+/// Lock button for OD/HP sliders.
+/// </summary>
+public partial class LockButton : CompositeDrawable, IHasTooltip
+{
+    public event Action<bool>? LockChanged;
+    public LocalisableString TooltipText { get; set; }
+
+    private bool _isLocked;
+    private Box _background = null!;
+    private SpriteText _icon = null!;
+
+    private readonly Color4 _unlockedColor = new Color4(50, 50, 55, 255);
+    private readonly Color4 _lockedColor = new Color4(255, 102, 170, 255);
+
+    public bool IsLocked
+    {
+        get => _isLocked;
+        set
+        {
+            if (_isLocked == value) return;
+            _isLocked = value;
+            UpdateVisuals();
+            LockChanged?.Invoke(_isLocked);
+        }
+    }
+
+    [BackgroundDependencyLoader]
+    private void load()
+    {
+        Masking = true;
+        CornerRadius = 4;
+
+        InternalChildren = new Drawable[]
+        {
+            _background = new Box
+            {
+                RelativeSizeAxes = Axes.Both,
+                Colour = _unlockedColor
+            },
+            _icon = new SpriteText
+            {
+                Text = "U",
+                Font = new FontUsage("", 12, "Bold"),
+                Colour = new Color4(120, 120, 120, 255),
+                Anchor = Anchor.Centre,
+                Origin = Anchor.Centre
+            }
+        };
+    }
+
+    private void UpdateVisuals()
+    {
+        _background.FadeColour(_isLocked ? _lockedColor : _unlockedColor, 150);
+        _icon.Text = _isLocked ? "L" : "U";
+        _icon.FadeColour(_isLocked ? Color4.White : new Color4(120, 120, 120, 255), 150);
+    }
+
+    protected override bool OnHover(HoverEvent e)
+    {
+        _background.FadeColour(_isLocked ? _lockedColor.Lighten(0.1f) : new Color4(65, 65, 70, 255), 100);
+        return base.OnHover(e);
+    }
+
+    protected override void OnHoverLost(HoverLostEvent e)
+    {
+        _background.FadeColour(_isLocked ? _lockedColor : _unlockedColor, 100);
+        base.OnHoverLost(e);
+    }
+
+    protected override bool OnClick(ClickEvent e)
+    {
+        IsLocked = !IsLocked;
         return true;
     }
 }

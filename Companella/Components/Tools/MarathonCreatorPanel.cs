@@ -68,9 +68,12 @@ public partial class MarathonCreatorPanel : CompositeDrawable
     };
 
     private readonly List<MarathonEntry> _entries = new();
+    private MarathonEntry _startBoundaryBreak = null!;
+    private MarathonEntry _endBoundaryBreak = null!;
     private OsuFile? _currentBeatmap;
 
     private readonly Color4 _accentColor = new Color4(255, 102, 170, 255);
+    private const double BoundaryBreakDuration = 3.0; // 3 seconds
 
     /// <summary>
     /// Event raised when marathon creation is requested.
@@ -325,6 +328,11 @@ public partial class MarathonCreatorPanel : CompositeDrawable
         _createButton.Clicked += OnCreateClicked;
         _refreshPreviewButton.Clicked += OnRefreshPreviewClicked;
         _centerTextBox.OnCommit += (_, _) => MarkPreviewNeedsUpdate();
+
+        // Initialize locked boundary breaks (always present at start and end)
+        _startBoundaryBreak = MarathonEntry.CreateLockedBreak(BoundaryBreakDuration);
+        _endBoundaryBreak = MarathonEntry.CreateLockedBreak(BoundaryBreakDuration);
+        RefreshList();
     }
 
     private Container CreateSection(string title, Drawable[] content)
@@ -821,7 +829,7 @@ public partial class MarathonCreatorPanel : CompositeDrawable
             RecalculateMsdRequested?.Invoke(new List<MarathonEntry>(_entries));
         }
 
-        private void OnCreateClicked()
+    private void OnCreateClicked()
     {
         if (_entries.Count == 0) return;
 
@@ -835,20 +843,30 @@ public partial class MarathonCreatorPanel : CompositeDrawable
             GlitchIntensity = _glitchIntensity.Value
         };
 
-        CreateMarathonRequested?.Invoke(new List<MarathonEntry>(_entries), metadata);
+        // Include boundary breaks in the final marathon
+        var fullList = new List<MarathonEntry> { _startBoundaryBreak };
+        fullList.AddRange(_entries);
+        fullList.Add(_endBoundaryBreak);
+
+        CreateMarathonRequested?.Invoke(fullList, metadata);
     }
 
     public void RefreshList()
     {
         _listContainer.Clear();
 
-        for (int i = 0; i < _entries.Count; i++)
+        // Build full list: start boundary + user entries + end boundary
+        var displayList = new List<MarathonEntry> { _startBoundaryBreak };
+        displayList.AddRange(_entries);
+        displayList.Add(_endBoundaryBreak);
+
+        for (int i = 0; i < displayList.Count; i++)
         {
-            var entry = _entries[i];
+            var entry = displayList[i];
             var entryRow = new MarathonEntryRow(entry, i, _accentColor)
             {
                 RelativeSizeAxes = Axes.X,
-                Height = 52
+                Height = entry.IsLocked ? 32 : 52 // Thinner for locked boundary breaks
             };
             entryRow.DeleteRequested += OnEntryDeleteRequested;
             entryRow.MoveUpRequested += OnEntryMoveUpRequested;
@@ -857,13 +875,16 @@ public partial class MarathonCreatorPanel : CompositeDrawable
             _listContainer.Add(entryRow);
         }
 
-            _clearButton.Enabled = _entries.Count > 0;
-            _msdButton.Enabled = _entries.Count > 0;
-            _createButton.Enabled = _entries.Count > 0;
+        _clearButton.Enabled = _entries.Count > 0;
+        _msdButton.Enabled = _entries.Count > 0;
+        _createButton.Enabled = _entries.Count > 0;
     }
 
     private void OnEntryDeleteRequested(MarathonEntry entry)
     {
+        // Locked entries cannot be deleted
+        if (entry.IsLocked) return;
+
         bool wasMapEntry = !entry.IsPause;
         _entries.Remove(entry);
         RefreshList();
@@ -877,6 +898,9 @@ public partial class MarathonCreatorPanel : CompositeDrawable
 
     private void OnEntryMoveUpRequested(MarathonEntry entry)
     {
+        // Locked entries cannot be moved
+        if (entry.IsLocked) return;
+
         var index = _entries.IndexOf(entry);
         if (index > 0)
         {
@@ -893,6 +917,9 @@ public partial class MarathonCreatorPanel : CompositeDrawable
 
     private void OnEntryMoveDownRequested(MarathonEntry entry)
     {
+        // Locked entries cannot be moved
+        if (entry.IsLocked) return;
+
         var index = _entries.IndexOf(entry);
         if (index < _entries.Count - 1)
         {
@@ -915,10 +942,14 @@ public partial class MarathonCreatorPanel : CompositeDrawable
 
     private void UpdateSummary()
     {
-        _summaryText.Text = $"{_entries.Count} map{(_entries.Count != 1 ? "s" : "")}";
+        // Only count actual maps (not pauses/breaks)
+        int mapCount = _entries.Count(e => !e.IsPause);
+        _summaryText.Text = $"{mapCount} map{(mapCount != 1 ? "s" : "")}";
 
-        // Calculate total duration at rate
+        // Calculate total duration at rate (including boundary breaks)
         double totalMs = _entries.Sum(e => e.EffectiveDurationAtRate);
+        totalMs += _startBoundaryBreak.EffectiveDurationAtRate;
+        totalMs += _endBoundaryBreak.EffectiveDurationAtRate;
         var totalTime = TimeSpan.FromMilliseconds(totalMs);
         _durationText.Text = $"Total: {(int)totalTime.TotalMinutes}:{totalTime.Seconds:D2}";
     }
@@ -954,6 +985,7 @@ public partial class MarathonEntryRow : CompositeDrawable
     private readonly Color4 _hoverBg = new Color4(50, 50, 55, 255);
     private readonly Color4 _pauseBg = new Color4(80, 80, 100, 255);
     private readonly Color4 _pauseHoverBg = new Color4(90, 90, 115, 255);
+    private readonly Color4 _lockedBreakBg = new Color4(35, 35, 45, 255);
     private readonly Color4 _deleteBg = new Color4(180, 60, 60, 255);
     private readonly Color4 _deleteHoverBg = new Color4(200, 80, 80, 255);
 
@@ -986,43 +1018,61 @@ public partial class MarathonEntryRow : CompositeDrawable
 
         var pauseColor = new Color4(80, 80, 100, 255);
 
-        InternalChildren = new Drawable[]
+        // Determine background color based on entry type
+        Color4 bgColor;
+        if (_entry.IsLocked)
+            bgColor = _lockedBreakBg;
+        else if (_entry.IsPause)
+            bgColor = pauseColor;
+        else
+            bgColor = _normalBg;
+
+        // Create background box first (need to store reference for hover effects)
+        _background = new Box
         {
-            _background = new Box
-            {
-                RelativeSizeAxes = Axes.Both,
-                Colour = _entry.IsPause ? pauseColor : _normalBg
-            },
+            RelativeSizeAxes = Axes.Both,
+            Colour = bgColor
+        };
+
+        var children = new List<Drawable>
+        {
+            _background,
             new FillFlowContainer
             {
                 RelativeSizeAxes = Axes.Both,
                 Direction = FillDirection.Horizontal,
-                Padding = new MarginPadding { Left = 10, Right = 6, Top = 6, Bottom = 6 },
+                Padding = new MarginPadding { Left = 10, Right = 6, Top = _entry.IsLocked ? 4 : 6, Bottom = _entry.IsLocked ? 4 : 6 },
                 Spacing = new Vector2(8, 0),
                 Children = new Drawable[]
                 {
-                    // Index number
+                    // Index number (smaller for locked entries)
                     new Container
                     {
-                        Size = new Vector2(24, 38),
+                        Size = new Vector2(24, _entry.IsLocked ? 20 : 38),
                         Child = new SpriteText
                         {
                             Text = $"{_index + 1}.",
-                            Font = new FontUsage("", 17, "Bold"),
-                            Colour = _accentColor,
+                            Font = new FontUsage("", _entry.IsLocked ? 13 : 17, "Bold"),
+                            Colour = _entry.IsLocked ? new Color4(100, 100, 120, 255) : _accentColor,
                             Anchor = Anchor.Centre,
                             Origin = Anchor.Centre
                         }
                     },
-                    // Map info section (title, version, creator, msd) or pause info
-                    _entry.IsPause ? CreatePauseInfoSection() : CreateMapInfoSection(),
+                    // Map info section, pause info, or locked break info
+                    _entry.IsLocked ? CreateLockedBreakInfoSection() : (_entry.IsPause ? CreatePauseInfoSection() : CreateMapInfoSection()),
                 }
-            },
-            // Action buttons on the right side
-            CreateActionButtonsSection()
+            }
         };
 
-        if (!_entry.IsPause)
+        // Only add action buttons for non-locked entries
+        if (!_entry.IsLocked)
+        {
+            children.Add(CreateActionButtonsSection());
+        }
+
+        InternalChildren = children;
+
+        if (!_entry.IsPause && !_entry.IsLocked)
         {
             _rateTextBox.OnCommit += OnRateCommit;
         }
@@ -1160,6 +1210,35 @@ public partial class MarathonEntryRow : CompositeDrawable
         };
     }
 
+    private Drawable CreateLockedBreakInfoSection()
+    {
+        return new FillFlowContainer
+        {
+            AutoSizeAxes = Axes.Both,
+            Direction = FillDirection.Horizontal,
+            Spacing = new Vector2(8, 0),
+            Children = new Drawable[]
+            {
+                new SpriteText
+                {
+                    Text = "BREAK",
+                    Font = new FontUsage("", 12, "Bold"),
+                    Colour = new Color4(90, 90, 110, 255),
+                    Anchor = Anchor.CentreLeft,
+                    Origin = Anchor.CentreLeft
+                },
+                new SpriteText
+                {
+                    Text = $"{_entry.PauseDurationSeconds:F0}s",
+                    Font = new FontUsage("", 12),
+                    Colour = new Color4(70, 70, 90, 255),
+                    Anchor = Anchor.CentreLeft,
+                    Origin = Anchor.CentreLeft
+                }
+            }
+        };
+    }
+
     private Drawable CreateActionButtonsSection()
     {
         var children = new List<Drawable>();
@@ -1249,12 +1328,23 @@ public partial class MarathonEntryRow : CompositeDrawable
 
     protected override bool OnHover(HoverEvent e)
     {
+        // Locked entries don't change on hover
+        if (_entry.IsLocked)
+            return base.OnHover(e);
+            
         _background.FadeColour(_entry.IsPause ? _pauseHoverBg : _hoverBg, 100);
         return base.OnHover(e);
     }
 
     protected override void OnHoverLost(HoverLostEvent e)
     {
+        // Locked entries don't change on hover
+        if (_entry.IsLocked)
+        {
+            base.OnHoverLost(e);
+            return;
+        }
+            
         _background.FadeColour(_entry.IsPause ? _pauseBg : _normalBg, 100);
         base.OnHoverLost(e);
     }
