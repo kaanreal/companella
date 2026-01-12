@@ -90,11 +90,11 @@ public partial class MapInfoDisplay : CompositeDrawable
                 Origin = Anchor.Centre,
                 Alpha = 0
             },
-            // Dim overlay for readability
+            // Dim overlay for readability (200 alpha = ~78% opacity for better text visibility on bright backgrounds)
             _backgroundDimOverlay = new Box
             {
                 RelativeSizeAxes = Axes.Both,
-                Colour = new Color4(0, 0, 0, 160),
+                Colour = new Color4(0, 0, 0, 185),
                 Alpha = 0
             },
             // Content - Two rows: info on top, MSD chart + patterns on bottom
