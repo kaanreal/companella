@@ -31,6 +31,8 @@ public class RateChanger
     /// <param name="rate">The rate multiplier (e.g., 1.2 for 120%).</param>
     /// <param name="nameFormat">Format string for the new difficulty name.</param>
     /// <param name="pitchAdjust">Whether to adjust pitch with rate (like DT/HT). If false, preserves original pitch.</param>
+    /// <param name="customOd">Custom Overall Difficulty value (null to keep original).</param>
+    /// <param name="customHp">Custom HP Drain Rate value (null to keep original).</param>
     /// <param name="progressCallback">Callback for progress updates.</param>
     /// <returns>Path to the new .osu file.</returns>
     public async Task<string> CreateRateChangedBeatmapAsync(
@@ -38,6 +40,8 @@ public class RateChanger
         double rate, 
         string nameFormat,
         bool pitchAdjust = true,
+        double? customOd = null,
+        double? customHp = null,
         Action<string>? progressCallback = null)
     {
         if (rate <= 0 || rate > 5)
@@ -98,7 +102,7 @@ public class RateChanger
         progressCallback?.Invoke("Creating modified .osu file...");
 
         // Modify the .osu content
-        var newLines = ModifyOsuContent(originalLines, rate, newDiffName, newAudioFilename, osuFile);
+        var newLines = ModifyOsuContent(originalLines, rate, newDiffName, newAudioFilename, osuFile, customOd, customHp);
         Logger.Info($"[RateChanger] Modified {newLines.Count} lines");
 
         // Write new .osu file
@@ -252,6 +256,8 @@ public class RateChanger
     /// <param name="step">Rate increment step (>= 0.01).</param>
     /// <param name="nameFormat">Format string for the new difficulty names.</param>
     /// <param name="pitchAdjust">Whether to adjust pitch with rate (like DT/HT). If false, preserves original pitch.</param>
+    /// <param name="customOd">Custom Overall Difficulty value (null to keep original).</param>
+    /// <param name="customHp">Custom HP Drain Rate value (null to keep original).</param>
     /// <param name="progressCallback">Callback for progress updates.</param>
     /// <returns>List of paths to the new .osu files.</returns>
     public async Task<List<string>> CreateBulkRateChangedBeatmapsAsync(
@@ -261,6 +267,8 @@ public class RateChanger
         double step,
         string nameFormat,
         bool pitchAdjust = true,
+        double? customOd = null,
+        double? customHp = null,
         Action<string>? progressCallback = null)
     {
         // Validate inputs
@@ -303,6 +311,8 @@ public class RateChanger
                     rate, 
                     nameFormat,
                     pitchAdjust,
+                    customOd,
+                    customHp,
                     null // Don't pass sub-progress to avoid too many updates
                 );
                 createdFiles.Add(newPath);
@@ -466,7 +476,7 @@ public class RateChanger
     /// <summary>
     /// Modifies the .osu file content for the new rate.
     /// </summary>
-    private List<string> ModifyOsuContent(string[] lines, double rate, string newDiffName, string newAudioFilename, OsuFile osuFile)
+    private List<string> ModifyOsuContent(string[] lines, double rate, string newDiffName, string newAudioFilename, OsuFile osuFile, double? customOd = null, double? customHp = null)
     {
         var result = new List<string>();
         var currentSection = "";
@@ -502,6 +512,19 @@ public class RateChanger
                             result.Add($"PreviewTime: {newPreviewTime}");
                             continue;
                         }
+                    }
+                    break;
+
+                case "[Difficulty]":
+                    if (customOd.HasValue && trimmed.StartsWith("OverallDifficulty:"))
+                    {
+                        result.Add($"OverallDifficulty:{customOd.Value.ToString("0.0#", CultureInfo.InvariantCulture)}");
+                        continue;
+                    }
+                    else if (customHp.HasValue && trimmed.StartsWith("HPDrainRate:"))
+                    {
+                        result.Add($"HPDrainRate:{customHp.Value.ToString("0.0#", CultureInfo.InvariantCulture)}");
+                        continue;
                     }
                     break;
 

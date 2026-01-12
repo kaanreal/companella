@@ -547,6 +547,10 @@ public partial class MainScreen : osu.Framework.Screens.Screen
             var dominantBpm = GetDominantBpm(_currentOsuFile);
             _rateChangerPanel.SetCurrentMapBpm(dominantBpm);
             
+            // Update OD/HP sliders with current map values
+            _rateChangerPanel.SetMapDifficultyValues(_currentOsuFile.OverallDifficulty, _currentOsuFile.HPDrainRate);
+            _bulkRateChangerPanel.SetMapDifficultyValues(_currentOsuFile.OverallDifficulty, _currentOsuFile.HPDrainRate);
+            
             // Update rate changer preview
             UpdateRatePreview(1.0, RateChanger.DefaultNameFormat);
         }
@@ -926,7 +930,7 @@ public partial class MainScreen : osu.Framework.Screens.Screen
         _rateChangerPanel.SetPreviewText(previewName);
     }
 
-    private async void OnApplyRateClicked(double rate, string format, bool pitchAdjust)
+    private async void OnApplyRateClicked(double rate, string format, bool pitchAdjust, double customOd, double customHp)
     {
         if (_currentOsuFile == null)
         {
@@ -961,6 +965,8 @@ public partial class MainScreen : osu.Framework.Screens.Screen
                 rate,
                 format,
                 pitchAdjust,
+                customOd,
+                customHp,
                 status => Schedule(() => 
                 {
                     _loadingOverlay.UpdateStatus(status);
@@ -984,7 +990,7 @@ public partial class MainScreen : osu.Framework.Screens.Screen
         }
     }
 
-    private async void OnApplyBulkRateClicked(double minRate, double maxRate, double step, string format, bool pitchAdjust)
+    private async void OnApplyBulkRateClicked(double minRate, double maxRate, double step, string format, bool pitchAdjust, double customOd, double customHp)
     {
         if (_currentOsuFile == null)
         {
@@ -1024,6 +1030,8 @@ public partial class MainScreen : osu.Framework.Screens.Screen
                 step,
                 format,
                 pitchAdjust,
+                customOd,
+                customHp,
                 status => Schedule(() => 
                 {
                     _loadingOverlay.UpdateStatus(status);

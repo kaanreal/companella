@@ -1,5 +1,6 @@
 using System.Globalization;
 using osu.Framework.Allocation;
+using osu.Framework.Bindables;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
 using osu.Framework.Graphics.Cursor;
@@ -13,6 +14,7 @@ using osuTK.Graphics;
 using Companella.Services.Tools;
 using TextBox = osu.Framework.Graphics.UserInterface.TextBox;
 using Companella.Components.Session;
+using osu.Framework.Extensions.Color4Extensions;
 
 namespace Companella.Components.Tools;
 
@@ -31,10 +33,16 @@ public partial class RateChangerPanel : CompositeDrawable
     private ModeToggleButton _rateModeButton = null!;
     private ModeToggleButton _bpmModeButton = null!;
     private SettingsCheckbox _pitchAdjustCheckbox = null!;
+    private BasicSliderBar<double> _odSlider = null!;
+    private BasicSliderBar<double> _hpSlider = null!;
+    private SpriteText _odValueText = null!;
+    private SpriteText _hpValueText = null!;
+    private LockButton _odLockButton = null!;
+    private LockButton _hpLockButton = null!;
     private Container _rateInputContainer = null!;
     private Container _bpmInputContainer = null!;
 
-    public event Action<double, string, bool>? ApplyRateClicked;
+    public event Action<double, string, bool, double, double>? ApplyRateClicked;
     public event Action<string>? FormatChanged;
     public event Action<double, string>? PreviewRequested;
     public event Action<bool>? PitchAdjustChanged;
@@ -44,6 +52,10 @@ public partial class RateChangerPanel : CompositeDrawable
     private double _targetBpm = 120.0;
     private bool _isTargetBpmMode = false;
     private bool _pitchAdjust = true;
+    private double _currentOd = 8.0;
+    private double _currentHp = 8.0;
+    private bool _odLocked = false;
+    private bool _hpLocked = false;
     private string _currentFormat = RateChanger.DefaultNameFormat;
 
     private readonly Color4 _accentColor = new Color4(255, 102, 170, 255);
@@ -109,6 +121,115 @@ public partial class RateChangerPanel : CompositeDrawable
                         IsChecked = true,
                         TooltipText = "When unchecked, preserves original pitch (nightcore-style)"
                     },
+                    // OD/HP Sliders Section
+                    CreateSection("Difficulty Settings", new Drawable[]
+                    {
+                        // OD Slider Row
+                        new Container
+                        {
+                            RelativeSizeAxes = Axes.X,
+                            Height = 28,
+                            Children = new Drawable[]
+                            {
+                                new SpriteText
+                                {
+                                    Text = "OD",
+                                    Font = new FontUsage("", 15),
+                                    Colour = new Color4(140, 140, 140, 255),
+                                    Anchor = Anchor.CentreLeft,
+                                    Origin = Anchor.CentreLeft,
+                                    Width = 25
+                                },
+                                new Container
+                                {
+                                    RelativeSizeAxes = Axes.X,
+                                    Height = 20,
+                                    Anchor = Anchor.CentreLeft,
+                                    Origin = Anchor.CentreLeft,
+                                    Padding = new MarginPadding { Left = 30, Right = 80 },
+                                    Child = _odSlider = new BasicSliderBar<double>
+                                    {
+                                        RelativeSizeAxes = Axes.X,
+                                        Height = 20,
+                                        Anchor = Anchor.CentreLeft,
+                                        Origin = Anchor.CentreLeft,
+                                        Current = new BindableDouble(8.0) { MinValue = 0, MaxValue = 10, Precision = 0.1 },
+                                        BackgroundColour = new Color4(40, 40, 45, 255),
+                                        SelectionColour = _accentColor
+                                    }
+                                },
+                                _odValueText = new SpriteText
+                                {
+                                    Text = "8.0",
+                                    Font = new FontUsage("", 15),
+                                    Colour = new Color4(200, 200, 200, 255),
+                                    Anchor = Anchor.CentreRight,
+                                    Origin = Anchor.CentreRight,
+                                    Margin = new MarginPadding { Right = 35 }
+                                },
+                                _odLockButton = new LockButton
+                                {
+                                    Size = new Vector2(24, 24),
+                                    Anchor = Anchor.CentreRight,
+                                    Origin = Anchor.CentreRight,
+                                    TooltipText = "Lock OD value when changing maps"
+                                }
+                            }
+                        },
+                        // HP Slider Row
+                        new Container
+                        {
+                            RelativeSizeAxes = Axes.X,
+                            Height = 28,
+                            Margin = new MarginPadding { Top = 4 },
+                            Children = new Drawable[]
+                            {
+                                new SpriteText
+                                {
+                                    Text = "HP",
+                                    Font = new FontUsage("", 15),
+                                    Colour = new Color4(140, 140, 140, 255),
+                                    Anchor = Anchor.CentreLeft,
+                                    Origin = Anchor.CentreLeft,
+                                    Width = 25
+                                },
+                                new Container
+                                {
+                                    RelativeSizeAxes = Axes.X,
+                                    Height = 20,
+                                    Anchor = Anchor.CentreLeft,
+                                    Origin = Anchor.CentreLeft,
+                                    Padding = new MarginPadding { Left = 30, Right = 80 },
+                                    Child = _hpSlider = new BasicSliderBar<double>
+                                    {
+                                        RelativeSizeAxes = Axes.X,
+                                        Height = 20,
+                                        Anchor = Anchor.CentreLeft,
+                                        Origin = Anchor.CentreLeft,
+                                        Current = new BindableDouble(8.0) { MinValue = 0, MaxValue = 10, Precision = 0.1 },
+                                        BackgroundColour = new Color4(40, 40, 45, 255),
+                                        SelectionColour = _accentColor
+                                    }
+                                },
+                                _hpValueText = new SpriteText
+                                {
+                                    Text = "8.0",
+                                    Font = new FontUsage("", 15),
+                                    Colour = new Color4(200, 200, 200, 255),
+                                    Anchor = Anchor.CentreRight,
+                                    Origin = Anchor.CentreRight,
+                                    Margin = new MarginPadding { Right = 35 }
+                                },
+                                _hpLockButton = new LockButton
+                                {
+                                    Size = new Vector2(24, 24),
+                                    Anchor = Anchor.CentreRight,
+                                    Origin = Anchor.CentreRight,
+                                    TooltipText = "Lock HP value when changing maps"
+                                }
+                            }
+                        }
+                    }),
                     // Rate Selection Section (shown in Rate mode)
                     _rateInputContainer = new Container
                     {
@@ -268,12 +389,42 @@ public partial class RateChangerPanel : CompositeDrawable
         _formatTextBox.OnCommit += OnFormatTextCommit;
         _applyButton.Clicked += OnApplyClicked;
         _pitchAdjustCheckbox.CheckedChanged += OnPitchAdjustChanged;
+        
+        // OD/HP slider events
+        _odSlider.Current.ValueChanged += e => OnOdSliderChanged(e.NewValue);
+        _hpSlider.Current.ValueChanged += e => OnHpSliderChanged(e.NewValue);
+        _odLockButton.LockChanged += OnOdLockChanged;
+        _hpLockButton.LockChanged += OnHpLockChanged;
     }
 
     private void OnPitchAdjustChanged(bool isChecked)
     {
         _pitchAdjust = isChecked;
         PitchAdjustChanged?.Invoke(isChecked);
+    }
+
+    private void OnOdSliderChanged(double value)
+    {
+        _currentOd = value;
+        _odValueText.Text = value.ToString("0.0", CultureInfo.InvariantCulture);
+    }
+
+    private void OnHpSliderChanged(double value)
+    {
+        _currentHp = value;
+        _hpValueText.Text = value.ToString("0.0", CultureInfo.InvariantCulture);
+    }
+
+    private void OnOdLockChanged(bool isLocked)
+    {
+        _odLocked = isLocked;
+        _odSlider.Alpha = isLocked ? 0.5f : 1.0f;
+    }
+
+    private void OnHpLockChanged(bool isLocked)
+    {
+        _hpLocked = isLocked;
+        _hpSlider.Alpha = isLocked ? 0.5f : 1.0f;
     }
 
     private Drawable[] CreateQuickRateButtons()
@@ -451,7 +602,7 @@ public partial class RateChangerPanel : CompositeDrawable
 
     private void OnApplyClicked()
     {
-        ApplyRateClicked?.Invoke(_currentRate, _currentFormat, _pitchAdjust);
+        ApplyRateClicked?.Invoke(_currentRate, _currentFormat, _pitchAdjust, _currentOd, _currentHp);
     }
 
     /// <summary>
@@ -491,6 +642,26 @@ public partial class RateChangerPanel : CompositeDrawable
     }
 
     public string CurrentFormat => _currentFormat;
+
+    /// <summary>
+    /// Updates OD/HP values from the current map (unless locked).
+    /// </summary>
+    public void SetMapDifficultyValues(double od, double hp)
+    {
+        if (!_odLocked)
+        {
+            _currentOd = od;
+            _odSlider.Current.Value = od;
+            _odValueText.Text = od.ToString("0.0", CultureInfo.InvariantCulture);
+        }
+        
+        if (!_hpLocked)
+        {
+            _currentHp = hp;
+            _hpSlider.Current.Value = hp;
+            _hpValueText.Text = hp.ToString("0.0", CultureInfo.InvariantCulture);
+        }
+    }
 }
 
 /// <summary>
@@ -802,6 +973,83 @@ public partial class ModernButton : CompositeDrawable, IHasTooltip
             Clicked?.Invoke();
             _hoverOverlay.FadeTo(0.3f, 50).Then().FadeTo(0.15f, 100);
         }
+        return true;
+    }
+}
+
+/// <summary>
+/// Lock button for OD/HP sliders.
+/// </summary>
+public partial class LockButton : CompositeDrawable, IHasTooltip
+{
+    public event Action<bool>? LockChanged;
+    public LocalisableString TooltipText { get; set; }
+
+    private bool _isLocked;
+    private Box _background = null!;
+    private SpriteText _icon = null!;
+
+    private readonly Color4 _unlockedColor = new Color4(50, 50, 55, 255);
+    private readonly Color4 _lockedColor = new Color4(255, 102, 170, 255);
+
+    public bool IsLocked
+    {
+        get => _isLocked;
+        set
+        {
+            if (_isLocked == value) return;
+            _isLocked = value;
+            UpdateVisuals();
+            LockChanged?.Invoke(_isLocked);
+        }
+    }
+
+    [BackgroundDependencyLoader]
+    private void load()
+    {
+        Masking = true;
+        CornerRadius = 4;
+
+        InternalChildren = new Drawable[]
+        {
+            _background = new Box
+            {
+                RelativeSizeAxes = Axes.Both,
+                Colour = _unlockedColor
+            },
+            _icon = new SpriteText
+            {
+                Text = "U",
+                Font = new FontUsage("", 12, "Bold"),
+                Colour = new Color4(120, 120, 120, 255),
+                Anchor = Anchor.Centre,
+                Origin = Anchor.Centre
+            }
+        };
+    }
+
+    private void UpdateVisuals()
+    {
+        _background.FadeColour(_isLocked ? _lockedColor : _unlockedColor, 150);
+        _icon.Text = _isLocked ? "L" : "U";
+        _icon.FadeColour(_isLocked ? Color4.White : new Color4(120, 120, 120, 255), 150);
+    }
+
+    protected override bool OnHover(HoverEvent e)
+    {
+        _background.FadeColour(_isLocked ? _lockedColor.Lighten(0.1f) : new Color4(65, 65, 70, 255), 100);
+        return base.OnHover(e);
+    }
+
+    protected override void OnHoverLost(HoverLostEvent e)
+    {
+        _background.FadeColour(_isLocked ? _lockedColor : _unlockedColor, 100);
+        base.OnHoverLost(e);
+    }
+
+    protected override bool OnClick(ClickEvent e)
+    {
+        IsLocked = !IsLocked;
         return true;
     }
 }

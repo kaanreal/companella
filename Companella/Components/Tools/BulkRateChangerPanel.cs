@@ -1,5 +1,6 @@
 using System.Globalization;
 using osu.Framework.Allocation;
+using osu.Framework.Bindables;
 using osu.Framework.Graphics;
 using osu.Framework.Graphics.Containers;
 using osu.Framework.Graphics.Cursor;
@@ -29,8 +30,14 @@ public partial class BulkRateChangerPanel : CompositeDrawable
     private SpriteText _ratesPreviewText = null!;
     private FillFlowContainer _presetContainer = null!;
     private SettingsCheckbox _pitchAdjustCheckbox = null!;
+    private BasicSliderBar<double> _odSlider = null!;
+    private BasicSliderBar<double> _hpSlider = null!;
+    private SpriteText _odValueText = null!;
+    private SpriteText _hpValueText = null!;
+    private LockButton _odLockButton = null!;
+    private LockButton _hpLockButton = null!;
 
-    public event Action<double, double, double, string, bool>? ApplyBulkRateClicked;
+    public event Action<double, double, double, string, bool, double, double>? ApplyBulkRateClicked;
     public event Action<string>? FormatChanged;
     public event Action<bool>? PitchAdjustChanged;
 
@@ -38,6 +45,10 @@ public partial class BulkRateChangerPanel : CompositeDrawable
     private double _maxRate = 1.5;
     private double _step = 0.1;
     private bool _pitchAdjust = true;
+    private double _currentOd = 8.0;
+    private double _currentHp = 8.0;
+    private bool _odLocked = false;
+    private bool _hpLocked = false;
     private string _format = RateChanger.DefaultNameFormat;
 
     private const double MinRateLimit = 0.1;
@@ -119,6 +130,115 @@ public partial class BulkRateChangerPanel : CompositeDrawable
                         LabelText = "Change Pitch",
                         IsChecked = true
                     },
+                    // OD/HP Sliders Section
+                    CreateSection("Difficulty Settings", new Drawable[]
+                    {
+                        // OD Slider Row
+                        new Container
+                        {
+                            RelativeSizeAxes = Axes.X,
+                            Height = 28,
+                            Children = new Drawable[]
+                            {
+                                new SpriteText
+                                {
+                                    Text = "OD",
+                                    Font = new FontUsage("", 15),
+                                    Colour = new Color4(140, 140, 140, 255),
+                                    Anchor = Anchor.CentreLeft,
+                                    Origin = Anchor.CentreLeft,
+                                    Width = 25
+                                },
+                                new Container
+                                {
+                                    RelativeSizeAxes = Axes.X,
+                                    Height = 20,
+                                    Anchor = Anchor.CentreLeft,
+                                    Origin = Anchor.CentreLeft,
+                                    Padding = new MarginPadding { Left = 30, Right = 80 },
+                                    Child = _odSlider = new BasicSliderBar<double>
+                                    {
+                                        RelativeSizeAxes = Axes.X,
+                                        Height = 20,
+                                        Anchor = Anchor.CentreLeft,
+                                        Origin = Anchor.CentreLeft,
+                                        Current = new BindableDouble(8.0) { MinValue = 0, MaxValue = 10, Precision = 0.1 },
+                                        BackgroundColour = new Color4(40, 40, 45, 255),
+                                        SelectionColour = _accentColor
+                                    }
+                                },
+                                _odValueText = new SpriteText
+                                {
+                                    Text = "8.0",
+                                    Font = new FontUsage("", 15),
+                                    Colour = new Color4(200, 200, 200, 255),
+                                    Anchor = Anchor.CentreRight,
+                                    Origin = Anchor.CentreRight,
+                                    Margin = new MarginPadding { Right = 35 }
+                                },
+                                _odLockButton = new LockButton
+                                {
+                                    Size = new Vector2(24, 24),
+                                    Anchor = Anchor.CentreRight,
+                                    Origin = Anchor.CentreRight,
+                                    TooltipText = "Lock OD value when changing maps"
+                                }
+                            }
+                        },
+                        // HP Slider Row
+                        new Container
+                        {
+                            RelativeSizeAxes = Axes.X,
+                            Height = 28,
+                            Margin = new MarginPadding { Top = 4 },
+                            Children = new Drawable[]
+                            {
+                                new SpriteText
+                                {
+                                    Text = "HP",
+                                    Font = new FontUsage("", 15),
+                                    Colour = new Color4(140, 140, 140, 255),
+                                    Anchor = Anchor.CentreLeft,
+                                    Origin = Anchor.CentreLeft,
+                                    Width = 25
+                                },
+                                new Container
+                                {
+                                    RelativeSizeAxes = Axes.X,
+                                    Height = 20,
+                                    Anchor = Anchor.CentreLeft,
+                                    Origin = Anchor.CentreLeft,
+                                    Padding = new MarginPadding { Left = 30, Right = 80 },
+                                    Child = _hpSlider = new BasicSliderBar<double>
+                                    {
+                                        RelativeSizeAxes = Axes.X,
+                                        Height = 20,
+                                        Anchor = Anchor.CentreLeft,
+                                        Origin = Anchor.CentreLeft,
+                                        Current = new BindableDouble(8.0) { MinValue = 0, MaxValue = 10, Precision = 0.1 },
+                                        BackgroundColour = new Color4(40, 40, 45, 255),
+                                        SelectionColour = _accentColor
+                                    }
+                                },
+                                _hpValueText = new SpriteText
+                                {
+                                    Text = "8.0",
+                                    Font = new FontUsage("", 15),
+                                    Colour = new Color4(200, 200, 200, 255),
+                                    Anchor = Anchor.CentreRight,
+                                    Origin = Anchor.CentreRight,
+                                    Margin = new MarginPadding { Right = 35 }
+                                },
+                                _hpLockButton = new LockButton
+                                {
+                                    Size = new Vector2(24, 24),
+                                    Anchor = Anchor.CentreRight,
+                                    Origin = Anchor.CentreRight,
+                                    TooltipText = "Lock HP value when changing maps"
+                                }
+                            }
+                        }
+                    }),
                     // Summary Section
                     new Container
                     {
@@ -180,6 +300,12 @@ public partial class BulkRateChangerPanel : CompositeDrawable
         _formatTextBox.OnCommit += (_, _) => OnFormatChanged();
         _applyButton.Clicked += OnApplyClicked;
         _pitchAdjustCheckbox.CheckedChanged += OnPitchAdjustChanged;
+        
+        // OD/HP slider events
+        _odSlider.Current.ValueChanged += e => OnOdSliderChanged(e.NewValue);
+        _hpSlider.Current.ValueChanged += e => OnHpSliderChanged(e.NewValue);
+        _odLockButton.LockChanged += OnOdLockChanged;
+        _hpLockButton.LockChanged += OnHpLockChanged;
 
         UpdatePreview();
     }
@@ -188,6 +314,30 @@ public partial class BulkRateChangerPanel : CompositeDrawable
     {
         _pitchAdjust = isChecked;
         PitchAdjustChanged?.Invoke(isChecked);
+    }
+
+    private void OnOdSliderChanged(double value)
+    {
+        _currentOd = value;
+        _odValueText.Text = value.ToString("0.0", CultureInfo.InvariantCulture);
+    }
+
+    private void OnHpSliderChanged(double value)
+    {
+        _currentHp = value;
+        _hpValueText.Text = value.ToString("0.0", CultureInfo.InvariantCulture);
+    }
+
+    private void OnOdLockChanged(bool isLocked)
+    {
+        _odLocked = isLocked;
+        _odSlider.Alpha = isLocked ? 0.5f : 1.0f;
+    }
+
+    private void OnHpLockChanged(bool isLocked)
+    {
+        _hpLocked = isLocked;
+        _hpSlider.Alpha = isLocked ? 0.5f : 1.0f;
     }
 
     private Drawable[] CreatePresetButtons()
@@ -378,7 +528,27 @@ public partial class BulkRateChangerPanel : CompositeDrawable
 
     private void OnApplyClicked()
     {
-        ApplyBulkRateClicked?.Invoke(_minRate, _maxRate, _step, _format, _pitchAdjust);
+        ApplyBulkRateClicked?.Invoke(_minRate, _maxRate, _step, _format, _pitchAdjust, _currentOd, _currentHp);
+    }
+
+    /// <summary>
+    /// Updates OD/HP values from the current map (unless locked).
+    /// </summary>
+    public void SetMapDifficultyValues(double od, double hp)
+    {
+        if (!_odLocked)
+        {
+            _currentOd = od;
+            _odSlider.Current.Value = od;
+            _odValueText.Text = od.ToString("0.0", CultureInfo.InvariantCulture);
+        }
+        
+        if (!_hpLocked)
+        {
+            _currentHp = hp;
+            _hpSlider.Current.Value = hp;
+            _hpValueText.Text = hp.ToString("0.0", CultureInfo.InvariantCulture);
+        }
     }
 
     /// <summary>
