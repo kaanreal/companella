@@ -108,31 +108,25 @@ public class TimingDeviationCalculator
                 }
             }
             
-            // Calculate map duration (considering rate)
+            // Calculate map duration in song time (no rate scaling needed since all times are in song time)
             double lastObjectTime = hitObjects.Max(h => h.IsHold ? h.EndTime : h.Time);
-            result.MapDuration = lastObjectTime / rate;
+            result.MapDuration = lastObjectTime;
             
-            // Debug: Show raw times before any scaling
-            Logger.Info($"[DeviationCalc] Raw beatmap first note: {hitObjects.OrderBy(h => h.Time).First().Time:F0}ms");
-            Logger.Info($"[DeviationCalc] Raw replay first press: {keyEvents.Where(e => e.IsPress).OrderBy(e => e.Time).FirstOrDefault()?.Time:F0}ms");
+            // Debug: Show raw times (no scaling needed)
+            Logger.Info($"[DeviationCalc] Beatmap first note: {hitObjects.OrderBy(h => h.Time).First().Time:F0}ms");
+            Logger.Info($"[DeviationCalc] Replay first press: {keyEvents.Where(e => e.IsPress).OrderBy(e => e.Time).FirstOrDefault()?.Time:F0}ms");
             
-            // IMPORTANT: Replay times are in REAL TIME (accumulated frame deltas)
-            // Beatmap times are in SONG TIME
-            // For DT: real_time = song_time / rate
-            // So we need to scale beatmap times DOWN to match replay's real time
-            // We should NOT scale replay times - they're already in real time!
+            // IMPORTANT: Both replay times and beatmap times are in SONG TIME.
+            // osu! replay frames store time relative to song position, not real elapsed time.
+            // This means for DT/HT, the replay already records hits at the correct song position
+            // and no scaling is needed for either the beatmap or replay times.
+            // The rate is still stored for display purposes (MapDuration calculation above).
             if (rate != 1.0f)
             {
-                Logger.Info($"[DeviationCalc] Applying rate adjustment to beatmap only: {rate}x");
-                foreach (var hitObject in hitObjects)
-                {
-                    hitObject.Time /= rate;
-                    hitObject.EndTime /= rate;
-                }
+                Logger.Info($"[DeviationCalc] Rate mod detected: {rate}x (no time scaling needed - both replay and beatmap use song time)");
             }
             
-            // DON'T scale replay times - they're already in real time
-            // The replay's frame TimeDiff values are actual milliseconds as they happened
+            // Both replay and beatmap use song time coordinates - no scaling needed
             var processedKeyEvents = keyEvents;
             
             // Get press and release events separately
@@ -149,9 +143,9 @@ public class TimingDeviationCalculator
             // Sort hit objects by time for proper matching
             var sortedHitObjects = hitObjects.OrderBy(h => h.Time).ToList();
             
-            // Debug: Show first few notes and keypresses (after rate adjustment)
-            Logger.Info($"[DeviationCalc] After rate adjustment - First 5 notes: {string.Join(", ", sortedHitObjects.Take(5).Select(n => $"[{n.Time:F0}ms Col{n.Column}]"))}");
-            Logger.Info($"[DeviationCalc] Replay presses (no scaling) - First 5: {string.Join(", ", pressEvents.Take(5).Select(p => $"[{p.Time:F0}ms Col{p.Column}]"))}");
+            // Debug: Show first few notes and keypresses (both in song time)
+            Logger.Info($"[DeviationCalc] First 5 notes: {string.Join(", ", sortedHitObjects.Take(5).Select(n => $"[{n.Time:F0}ms Col{n.Column}]"))}");
+            Logger.Info($"[DeviationCalc] First 5 replay presses: {string.Join(", ", pressEvents.Take(5).Select(p => $"[{p.Time:F0}ms Col{p.Column}]"))}");
             
             // Show time alignment diagnostic
             if (sortedHitObjects.Count > 0 && pressEvents.Count > 0)
