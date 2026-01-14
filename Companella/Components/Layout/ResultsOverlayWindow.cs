@@ -41,11 +41,7 @@ public partial class ResultsOverlayWindow : CompositeDrawable
     private TimingDeviationChart _chart = null!;
     private Container _contentContainer = null!;
     private Container _chartContainer = null!; // Inner container for screenshot capture
-    private Container _headerContainer = null!;
-    private FunctionButton _closeButton = null!;
-    private ClickableContainer _cameraButton = null!;
-    private Sprite _cameraSprite = null!;
-    private SpriteText _titleText = null!;
+    private CustomTitleBar _titleBar = null!;
     private SpriteText _loadingText = null!;
     private SpriteText _errorText = null!;
     
@@ -93,72 +89,16 @@ public partial class ResultsOverlayWindow : CompositeDrawable
                 RelativeSizeAxes = Axes.Both,
                 Colour = new Color4(40, 40, 55, 40)
             },
-            // Header bar
-            _headerContainer = new Container
+            // Title bar (reusable component with dragging support)
+            _titleBar = new CustomTitleBar
             {
-                RelativeSizeAxes = Axes.X,
-                Height = 40,
-                Anchor = Anchor.TopLeft,
-                Origin = Anchor.TopLeft,
-                Children = new Drawable[]
-                {
-                    new Box
-                    {
-                        RelativeSizeAxes = Axes.Both,
-                        Colour = new Color4(15, 15, 20, 255)
-                    },
-                    // Title
-                    _titleText = new SpriteText
-                    {
-                        Text = "Replay Analysis",
-                        Font = new FontUsage("", 18, "Bold"),
-                        Colour = new Color4(220, 220, 230, 255),
-                        Anchor = Anchor.CentreLeft,
-                        Origin = Anchor.CentreLeft,
-                        Padding = new MarginPadding { Left = 16 }
-                    },
-                    // Camera/screenshot button with icon
-                    _cameraButton = new ClickableContainer
-                    {
-                        Width = 36,
-                        Height = 28,
-                        Anchor = Anchor.CentreRight,
-                        Origin = Anchor.CentreRight,
-                        Margin = new MarginPadding { Right = 48 },
-                        Masking = true,
-                        CornerRadius = 5,
-                        Children = new Drawable[]
-                        {
-                            new Box
-                            {
-                                RelativeSizeAxes = Axes.Both,
-                                Colour = new Color4(255, 102, 170, 255)
-                            },
-                            _cameraSprite = new Sprite
-                            {
-                                Size = new Vector2(18, 18),
-                                Anchor = Anchor.Centre,
-                                Origin = Anchor.Centre,
-                                Colour = Color4.White
-                            }
-                        }
-                    },
-                    // Close button
-                    _closeButton = new FunctionButton("X")
-                    {
-                        Width = 36,
-                        Height = 28,
-                        Anchor = Anchor.CentreRight,
-                        Origin = Anchor.CentreRight,
-                        Margin = new MarginPadding { Right = 8 }
-                    }
-                }
+                Depth = -1 // Ensure it's on top
             },
             // Main content area
             _contentContainer = new Container
             {
                 RelativeSizeAxes = Axes.Both,
-                Padding = new MarginPadding { Top = 40, Left = 12, Right = 12, Bottom = 12 },
+                Padding = new MarginPadding { Top = 32, Left = 12, Right = 12, Bottom = 12 },
                 Child = _chartContainer = new Container
                 {
                     RelativeSizeAxes = Axes.Both,
@@ -206,11 +146,10 @@ public partial class ResultsOverlayWindow : CompositeDrawable
             }
         };
         
-        _closeButton.Clicked += () => Hide();
-        _cameraButton.Action += OnCameraClicked;
-        
-        // Load camera icon
-        LoadCameraIcon();
+        // Wire up title bar events
+        _titleBar.SetTitle("Replay Analysis");
+        _titleBar.SetCloseAction(() => Hide());
+        _titleBar.ScreenshotRequested += OnCameraClicked;
         
         // Wire up chart's re-analysis request to our event
         _chart.ReanalysisRequested += od =>
@@ -232,34 +171,11 @@ public partial class ResultsOverlayWindow : CompositeDrawable
     }
     
     /// <summary>
-    /// Loads the camera icon texture from embedded resources.
+    /// Sets whether the window is draggable.
     /// </summary>
-    private void LoadCameraIcon()
+    public void SetDraggable(bool draggable)
     {
-        try
-        {
-            var assembly = typeof(ResultsOverlayWindow).Assembly;
-            var resourceStream = assembly.GetManifestResourceStream("Companella.Resources.Images.e722.png");
-            
-            if (resourceStream != null)
-            {
-                using (resourceStream)
-                {
-                    var image = Image.Load<Rgba32>(resourceStream);
-                    var texture = Renderer.CreateTexture(image.Width, image.Height);
-                    texture.SetData(new TextureUpload(image));
-                    _cameraSprite.Texture = texture;
-                }
-            }
-            else
-            {
-                Logger.Info("[ReplayAnalysis] Camera icon not found in resources");
-            }
-        }
-        catch (Exception ex)
-        {
-            Logger.Info($"[ReplayAnalysis] Error loading camera icon: {ex.Message}");
-        }
+        _titleBar?.SetDraggable(draggable);
     }
     
     /// <summary>
@@ -269,7 +185,7 @@ public partial class ResultsOverlayWindow : CompositeDrawable
     {
         _isVisible = true;
         _chart.Clear();
-        _titleText.Text = "Replay Analysis - Loading...";
+        _titleBar.SetTitle("Replay Analysis - Loading...");
         _loadingText.FadeTo(1, 100);
         _errorText.FadeTo(0, 100);
         _contentContainer.FadeTo(0.3f, 100);
@@ -291,9 +207,15 @@ public partial class ResultsOverlayWindow : CompositeDrawable
         _loadingText.FadeTo(0, 100);
         _errorText.FadeTo(0, 100);
         _contentContainer.FadeTo(1, 150);
-        _chart.SetData(data);
-        UpdateTitleWithStats();
         this.FadeTo(1, 150);
+        
+        // Schedule chart data update after layout is complete
+        // Double-schedule ensures DrawWidth/DrawHeight are valid
+        Schedule(() => Schedule(() =>
+        {
+            _chart.SetData(data);
+            UpdateTitleWithStats();
+        }));
     }
     
     /// <summary>
@@ -302,7 +224,7 @@ public partial class ResultsOverlayWindow : CompositeDrawable
     public void ShowError(string message)
     {
         _isVisible = true;
-        _titleText.Text = "Replay Analysis - Error";
+        _titleBar.SetTitle("Replay Analysis - Error");
         _loadingText.FadeTo(0, 100);
         _errorText.Text = message;
         _errorText.FadeTo(1, 100);
@@ -412,7 +334,7 @@ public partial class ResultsOverlayWindow : CompositeDrawable
         }
         
         var filterInfo = activeCount < _chart.KeyCount ? $" ({activeCount}/{_chart.KeyCount} keys)" : "";
-        _titleText.Text = $"Replay Analysis [{systemName}]{filterInfo}";
+        _titleBar.SetTitle($"Replay Analysis [{systemName}]{filterInfo}");
     }
 }
 

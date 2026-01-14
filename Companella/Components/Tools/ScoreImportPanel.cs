@@ -7,6 +7,7 @@ using osu.Framework.Graphics.Sprites;
 using osu.Framework.Input.Events;
 using osuTK;
 using osuTK.Graphics;
+using Companella.Services.Session;
 using Companella.Services.Tools;
 
 namespace Companella.Components.Tools;
@@ -19,8 +20,12 @@ public partial class ScoreImportPanel : CompositeDrawable
 {
     [Resolved]
     private ScoreImportService ImportService { get; set; } = null!;
+    
+    [Resolved]
+    private ReplayFileWatcherService ReplayWatcherService { get; set; } = null!;
 
     private ImportButton _importButton = null!;
+    private ImportButton _reimportReplaysButton = null!;
     private SpriteText _statusText = null!;
     private SpriteText _progressText = null!;
     private SpriteText _resultText = null!;
@@ -77,12 +82,29 @@ public partial class ScoreImportPanel : CompositeDrawable
                         Margin = new MarginPadding { Top = 4 },
                         Children = new Drawable[]
                         {
-                            _importButton = new ImportButton
+                            // Buttons row
+                            new FillFlowContainer
                             {
-                                Text = "Import Scores as Sessions",
-                                Width = 200,
-                                Height = 32,
-                                Action = OnImportClicked
+                                AutoSizeAxes = Axes.Both,
+                                Direction = FillDirection.Horizontal,
+                                Spacing = new Vector2(8, 0),
+                                Children = new Drawable[]
+                                {
+                                    _importButton = new ImportButton
+                                    {
+                                        Text = "Import Scores as Sessions",
+                                        Width = 200,
+                                        Height = 32,
+                                        Action = OnImportClicked
+                                    },
+                                    _reimportReplaysButton = new ImportButton
+                                    {
+                                        Text = "Find Missing Replays",
+                                        Width = 160,
+                                        Height = 32,
+                                        Action = OnFindMissingReplaysClicked
+                                    }
+                                }
                             },
                             _statusText = new SpriteText
                             {
@@ -188,6 +210,52 @@ public partial class ScoreImportPanel : CompositeDrawable
                     _resultText.Colour = new Color4(255, 100, 100, 255);
                     _resultText.Alpha = 1;
                 }
+            });
+        });
+    }
+    
+    private void OnFindMissingReplaysClicked()
+    {
+        if (_isWorking) return;
+
+        _isWorking = true;
+        _importButton.Enabled.Value = false;
+        _reimportReplaysButton.Enabled.Value = false;
+        _statusText.Alpha = 1;
+        _statusText.Text = "Finding missing replays...";
+        _progressText.Alpha = 1;
+        _progressText.Text = "";
+        _resultText.Alpha = 0;
+
+        Task.Run(() =>
+        {
+            var foundCount = ReplayWatcherService.FindAllMissingReplays((matched, total) =>
+            {
+                Schedule(() =>
+                {
+                    _progressText.Text = $"Found {matched} of {total} checked...";
+                });
+            });
+
+            Schedule(() =>
+            {
+                _isWorking = false;
+                _importButton.Enabled.Value = true;
+                _reimportReplaysButton.Enabled.Value = true;
+                _statusText.Alpha = 0;
+                _progressText.Alpha = 0;
+
+                if (foundCount > 0)
+                {
+                    _resultText.Text = $"Found {foundCount} missing replays";
+                    _resultText.Colour = new Color4(100, 200, 100, 255);
+                }
+                else
+                {
+                    _resultText.Text = "No missing replays found";
+                    _resultText.Colour = new Color4(160, 160, 160, 255);
+                }
+                _resultText.Alpha = 1;
             });
         });
     }

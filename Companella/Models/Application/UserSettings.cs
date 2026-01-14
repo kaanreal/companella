@@ -166,4 +166,11 @@ public class UserSettings
     /// </summary>
     [JsonPropertyName("replayAnalysisEnabled")]
     public bool ReplayAnalysisEnabled { get; set; } = true;
+    
+    /// <summary>
+    /// Whether to prefer romanized metadata (title/artist) over original unicode.
+    /// When true, shows "Artist - Title". When false, shows unicode versions if available.
+    /// </summary>
+    [JsonPropertyName("preferRomanizedMetadata")]
+    public bool PreferRomanizedMetadata { get; set; } = false;
 }

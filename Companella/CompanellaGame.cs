@@ -72,6 +72,9 @@ public partial class CompanellaGame : Game
     private ScoreMigrationService _scoreMigrationService = null!;
     private ScoreImportService _scoreImportService = null!;
     
+    // Replay file watcher
+    private ReplayFileWatcherService _replayFileWatcherService = null!;
+    
     // Tray icon
     private TrayIconService _trayIconService = null!;
     
@@ -161,6 +164,10 @@ public partial class CompanellaGame : Game
         _mapsDatabaseService.SetBeatmapApiService(_beatmapApiService);
         _scoreMigrationService = new ScoreMigrationService(_processDetector, _fileParser);
         _scoreImportService = new ScoreImportService(_processDetector, _replayParserService, _sessionDatabaseService, _mapsDatabaseService);
+        
+        // Replay file watcher for matching replays to session plays
+        _replayFileWatcherService = new ReplayFileWatcherService(_processDetector, _sessionDatabaseService, _scoreImportService);
+        _replayFileWatcherService.StartWatching();
         _skillsTrendAnalyzer = new SkillsTrendAnalyzer(_sessionDatabaseService);
         _mapMmrCalculator = new MapMmrCalculator(_mapsDatabaseService);
         _mapRecommendationService = new MapRecommendationService(_mapsDatabaseService, _mapMmrCalculator, _skillsTrendAnalyzer);
@@ -182,6 +189,7 @@ public partial class CompanellaGame : Game
         _dependencies.CacheAs(_autoUpdaterService);
         _dependencies.CacheAs(_sessionDatabaseService);
         _dependencies.CacheAs(_sessionTrackerService);
+        _dependencies.CacheAs(_replayFileWatcherService);
         _dependencies.CacheAs(_mapsDatabaseService);
         _dependencies.CacheAs(_skillsTrendAnalyzer);
         _dependencies.CacheAs(_mapMmrCalculator);
@@ -210,6 +218,10 @@ public partial class CompanellaGame : Game
 
         // Load custom fonts from embedded resources
         AddFont(Resources, @"Resources/Fonts/Noto/Noto-Basic");
+        AddFont(Resources, @"Resources/Fonts/Noto/Noto-JP");
+        AddFont(Resources, @"Resources/Fonts/Noto/Noto-Hangul");
+        AddFont(Resources, @"Resources/Fonts/Noto/Noto-CJK-Basic");
+        AddFont(Resources, @"Resources/Fonts/Noto/Noto-Bopomofo");
         
         // Create scaled content container for global UI scaling
         _scaledContainer = new ScaledContentContainer
@@ -256,8 +268,18 @@ public partial class CompanellaGame : Game
         else
         {
             _mainScreen = new MainScreen();
+            _mainScreen.ReplayAnalysisRequested += OnReplayAnalysisRequested;
             _screenStack.Push(_mainScreen);
         }
+    }
+    
+    /// <summary>
+    /// Handles replay analysis requests from the session panel.
+    /// </summary>
+    private void OnReplayAnalysisRequested(string replayPath)
+    {
+        Logger.Info($"[CompanellaGame] Replay analysis requested: {replayPath}");
+        HandleReplayFileDrop(replayPath);
     }
 
     protected override void LoadComplete()
@@ -751,7 +773,7 @@ public partial class CompanellaGame : Game
                         }
                         
                         Logger.Info("[TimingDeviation] Could not identify the specific replay for this score");
-                        Schedule(() => _resultsOverlay?.ShowError("Could not find replay data for this score"));
+                        Schedule(() => ExitReplayAnalysisMode());
                         return;
                     }
                     
@@ -763,7 +785,7 @@ public partial class CompanellaGame : Game
                     if (replayResult is not { } replay)
                     {
                         Logger.Info("[TimingDeviation] No replay file found");
-                        Schedule(() => _resultsOverlay?.ShowError("Could not read hit error data"));
+                        Schedule(() => ExitReplayAnalysisMode());
                         return;
                     }
                     
@@ -777,7 +799,7 @@ public partial class CompanellaGame : Game
                     if (keyEvents.Count == 0)
                     {
                         Logger.Info("[TimingDeviation] No key events in replay");
-                        Schedule(() => _resultsOverlay?.ShowError("No timing data available"));
+                        Schedule(() => ExitReplayAnalysisMode());
                         return;
                     }
                     
@@ -795,13 +817,13 @@ public partial class CompanellaGame : Game
                     else
                     {
                         Logger.Info($"[TimingDeviation] Analysis failed: {replayAnalysis.ErrorMessage}");
-                        Schedule(() => _resultsOverlay?.ShowError(replayAnalysis.ErrorMessage ?? "Analysis failed"));
+                        Schedule(() => ExitReplayAnalysisMode());
                     }
                 }
                 catch (Exception ex)
                 {
                     Logger.Info($"[TimingDeviation] Error during analysis: {ex.Message}");
-                    Schedule(() => _resultsOverlay?.ShowError($"Error: {ex.Message}"));
+                    Schedule(() => ExitReplayAnalysisMode());
                 }
             });
         });
@@ -895,10 +917,16 @@ public partial class CompanellaGame : Game
         var scale = settings.UIScale;
         var width = (int)(settings.ReplayAnalysisWidth * scale);
         var height = (int)(settings.ReplayAnalysisHeight * scale);
-        var x = settings.ReplayAnalysisX;
-        var y = settings.ReplayAnalysisY;
         
-        Logger.Info($"[ReplayAnalysis] Resizing window to {width}x{height} at ({x}, {y})");
+        // In overlay mode, use saved position; otherwise keep current position (window is draggable)
+        var isOverlayMode = _overlayService?.IsOverlayMode == true;
+        var x = isOverlayMode ? settings.ReplayAnalysisX : _savedWindowPositionBeforeAnalysis.X;
+        var y = isOverlayMode ? settings.ReplayAnalysisY : _savedWindowPositionBeforeAnalysis.Y;
+        
+        Logger.Info($"[ReplayAnalysis] Resizing window to {width}x{height} at ({x}, {y}), overlay mode: {isOverlayMode}");
+        
+        // Tell the results overlay whether it should be draggable
+        _resultsOverlay?.SetDraggable(!isOverlayMode);
         
         // Use SetWindowPos to resize and reposition window
         var windowTitle = Window.Title;
@@ -1467,7 +1495,16 @@ public partial class CompanellaGame : Game
                 }
                 
                 // Find the corresponding beatmap by MD5 hash
-                var beatmapPath = _replayParserService.FindBeatmapByHash(replay.BeatmapMD5Hash);
+                // First try fast lookup from maps.db
+                var beatmapPath = _mapsDatabaseService.GetBeatmapPathByHash(replay.BeatmapMD5Hash);
+                
+                // Fall back to scanning songs folder if not found in maps.db
+                if (string.IsNullOrEmpty(beatmapPath))
+                {
+                    Logger.Info($"[FileDrop] Beatmap not in maps.db, scanning songs folder...");
+                    beatmapPath = _replayParserService.FindBeatmapByHash(replay.BeatmapMD5Hash);
+                }
+                
                 if (string.IsNullOrEmpty(beatmapPath))
                 {
                     Logger.Info($"[FileDrop] Could not find beatmap for replay (hash: {replay.BeatmapMD5Hash})");
@@ -1588,6 +1625,7 @@ public partial class CompanellaGame : Game
         _sessionTrackerService?.Dispose();
         _sessionDatabaseService?.Dispose();
         _mapsDatabaseService?.Dispose();
+        _replayFileWatcherService?.Dispose();
         _trayIconService?.Dispose();
         _aptabaseService?.Dispose();
         base.Dispose(isDisposing);

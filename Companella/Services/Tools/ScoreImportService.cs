@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text;
 using Companella.Models.Session;
 using Companella.Services.Analysis;
@@ -284,9 +285,30 @@ public class ScoreImportService
                         Logger.Info($"[ScoreImport] MSD calculation failed: {ex.Message}");
                     }
 
+                    // Calculate beatmap hash
+                    string beatmapHash = "";
+                    try
+                    {
+                        if (File.Exists(importScore.BeatmapPath))
+                        {
+                            using var md5 = MD5.Create();
+                            using var stream = File.OpenRead(importScore.BeatmapPath);
+                            var hashBytes = md5.ComputeHash(stream);
+                            beatmapHash = BitConverter.ToString(hashBytes).Replace("-", "").ToLowerInvariant();
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Info($"[ScoreImport] Hash calculation failed: {ex.Message}");
+                    }
+
                     plays.Add(new SessionPlayResult(
                         importScore.BeatmapPath!,
+                        beatmapHash,
                         importScore.Accuracy,
+                        0, // Misses - not available during import
+                        0, // PauseCount - not available during import
+                        PlayStatus.Completed, // Status - assume completed for imports
                         sessionTime,
                         playTime,
                         highestMsd,
@@ -445,6 +467,133 @@ public class ScoreImportService
 
         return 1.0f;
     }
+    
+    /// <summary>
+    /// Result of a replay lookup operation.
+    /// </summary>
+    public class ReplayLookupResult
+    {
+        public string ReplayHash { get; set; } = string.Empty;
+        public string? ReplayPath { get; set; }
+        public long Timestamp { get; set; }
+    }
+    
+    /// <summary>
+    /// Finds replay info from scores.db by matching beatmap hash and accuracy.
+    /// Returns all matching scores with their replay hashes.
+    /// </summary>
+    /// <param name="beatmapHash">The beatmap MD5 hash to look for.</param>
+    /// <param name="accuracy">The accuracy to match (with some tolerance).</param>
+    /// <returns>List of matching replay info, ordered by timestamp descending.</returns>
+    public List<ReplayLookupResult> FindReplayInScoresDb(string beatmapHash, double accuracy)
+    {
+        var results = new List<ReplayLookupResult>();
+        
+        try
+        {
+            var osuDir = _processDetector.GetOsuDirectory();
+            if (string.IsNullOrEmpty(osuDir))
+                return results;
+
+            var scoresPath = Path.Combine(osuDir, "scores.db");
+            if (!File.Exists(scoresPath))
+                return results;
+
+            var replayFolders = _replayParser.GetReplayFolders();
+            var scores = ReadScoresDb(scoresPath);
+            
+            // Find scores matching the beatmap hash
+            var hashLower = beatmapHash.ToLowerInvariant();
+            var matchingScores = scores
+                .Where(s => s.BeatmapHash.Equals(hashLower, StringComparison.OrdinalIgnoreCase) 
+                         && !string.IsNullOrEmpty(s.ReplayHash))
+                .ToList();
+            
+            Logger.Info($"[ScoreImport] Found {matchingScores.Count} scores for beatmap hash {hashLower}, looking for accuracy {accuracy:F4}%");
+            
+            foreach (var score in matchingScores)
+            {
+                // Calculate accuracy for this score
+                var scoreAccuracy = CalculateManiaAccuracy(score);
+                
+                // Match if accuracy is within 0.5% (account for rounding differences)
+                var diff = Math.Abs(scoreAccuracy - accuracy);
+                if (diff < 0.5)
+                {
+                    Logger.Info($"[ScoreImport] Matched! Score accuracy: {scoreAccuracy:F4}%, diff: {diff:F4}%");
+                    var result = new ReplayLookupResult
+                    {
+                        ReplayHash = score.ReplayHash,
+                        Timestamp = score.Timestamp
+                    };
+                    
+                    // Try to find the actual replay file
+                    result.ReplayPath = FindReplayFile(score.BeatmapHash, score.Timestamp, replayFolders);
+                    
+                    results.Add(result);
+                }
+            }
+            
+            // Order by timestamp descending (most recent first)
+            results = results.OrderByDescending(r => r.Timestamp).ToList();
+        }
+        catch (Exception ex)
+        {
+            Logger.Info($"[ScoreImport] Error finding replay in scores.db: {ex.Message}");
+        }
+        
+        return results;
+    }
+    
+    /// <summary>
+    /// Finds all replay info from scores.db for plays without replays.
+    /// Returns a dictionary mapping (beatmapHash, accuracy) to replay info.
+    /// </summary>
+    public Dictionary<string, List<ReplayLookupResult>> GetAllReplayInfo()
+    {
+        var results = new Dictionary<string, List<ReplayLookupResult>>(StringComparer.OrdinalIgnoreCase);
+        
+        try
+        {
+            var osuDir = _processDetector.GetOsuDirectory();
+            if (string.IsNullOrEmpty(osuDir))
+                return results;
+
+            var scoresPath = Path.Combine(osuDir, "scores.db");
+            if (!File.Exists(scoresPath))
+                return results;
+
+            var replayFolders = _replayParser.GetReplayFolders();
+            var scores = ReadScoresDb(scoresPath);
+            
+            // Group by beatmap hash
+            foreach (var score in scores.Where(s => !string.IsNullOrEmpty(s.ReplayHash)))
+            {
+                var hashLower = score.BeatmapHash.ToLowerInvariant();
+                
+                if (!results.ContainsKey(hashLower))
+                    results[hashLower] = new List<ReplayLookupResult>();
+                
+                var accuracy = CalculateManiaAccuracy(score);
+                var replayPath = FindReplayFile(score.BeatmapHash, score.Timestamp, replayFolders);
+                
+                results[hashLower].Add(new ReplayLookupResult
+                {
+                    ReplayHash = score.ReplayHash,
+                    ReplayPath = replayPath,
+                    Timestamp = score.Timestamp
+                });
+            }
+            
+            Logger.Info($"[ScoreImport] Loaded {results.Count} beatmaps with replay info from scores.db");
+        }
+        catch (Exception ex)
+        {
+            Logger.Info($"[ScoreImport] Error reading scores.db: {ex.Message}");
+        }
+        
+        return results;
+    }
 
     /// <summary>
     /// Reads all scores from scores.db (read-only, no backup).
@@ -487,7 +636,7 @@ public class ScoreImportService
                 score.PlayerName = ReadOsuString(reader);
 
                 // Replay MD5 (String)
-                ReadOsuString(reader);
+                score.ReplayHash = ReadOsuString(reader);
 
                 // Hit counts
                 score.Count300 = reader.ReadInt16();
@@ -581,6 +730,7 @@ public class ScoreImportService
         public string BeatmapHash { get; set; } = string.Empty;
         public byte Mode { get; set; }
         public string PlayerName { get; set; } = string.Empty;
+        public string ReplayHash { get; set; } = string.Empty;
         public short Count300 { get; set; }
         public short Count100 { get; set; }
         public short Count50 { get; set; }

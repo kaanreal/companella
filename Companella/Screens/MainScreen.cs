@@ -13,6 +13,7 @@ using Companella.Components.Tools;
 using Companella.Models.Application;
 using Companella.Models.Beatmap;
 using Companella.Models.Difficulty;
+using Companella.Models.Session;
 using Companella.Services.Analysis;
 using Companella.Services.Beatmap;
 using Companella.Services.Common;
@@ -64,8 +65,7 @@ public partial class MainScreen : osu.Framework.Screens.Screen
     // Gameplay tab components
     private RateChangerPanel _rateChangerPanel = null!;
     private ModSelectionPanel _modSelectionPanel = null!;
-    private SessionTrackerPanel _sessionTrackerPanel = null!;
-    private SessionHistoryPanel _sessionHistoryPanel = null!;
+    private SessionPanel _sessionPanel = null!;
     private SkillsAnalysisPanel _skillsAnalysisPanel = null!;
     private SessionPlannerPanel _sessionPlannerPanel = null!;
     
@@ -227,8 +227,7 @@ public partial class MainScreen : osu.Framework.Screens.Screen
         // Create panels for gameplay features (auto-sized)
         _rateChangerPanel = new RateChangerPanel();
         _modSelectionPanel = new ModSelectionPanel();
-        _sessionTrackerPanel = new SessionTrackerPanel();
-        _sessionHistoryPanel = new SessionHistoryPanel();
+        _sessionPanel = new SessionPanel();
         _skillsAnalysisPanel = new SkillsAnalysisPanel();
         _sessionPlannerPanel = new SessionPlannerPanel();
         
@@ -246,6 +245,10 @@ public partial class MainScreen : osu.Framework.Screens.Screen
         {
             Schedule(() => _loadingOverlay.Hide());
         };
+        
+        // Wire up session panel for replay and beatmap analysis
+        _sessionPanel.ReplayAnalysisRequested += OnReplayAnalysisRequested;
+        _sessionPanel.BeatmapAnalysisRequested += OnBeatmapAnalysisRequested;
         
         // Wire up skills analysis panel to load recommended maps
         _skillsAnalysisPanel.MapSelected += OnRecommendedMapSelected;
@@ -288,8 +291,7 @@ public partial class MainScreen : osu.Framework.Screens.Screen
         {
             new SplitTabItem("Rate Changer", _rateChangerPanel),
             new SplitTabItem("Mods", _modSelectionPanel),
-            new SplitTabItem("Session Tracker", _sessionTrackerPanel),
-            new SplitTabItem("Session History", _sessionHistoryPanel),
+            new SplitTabItem("Session", _sessionPanel),
             new SplitTabItem("Skills Analysis", _skillsAnalysisPanel),
             new SplitTabItem("Session Planner", _sessionPlannerPanel)
         })
@@ -303,6 +305,45 @@ public partial class MainScreen : osu.Framework.Screens.Screen
             Child = splitContainer
         };
     }
+    
+    /// <summary>
+    /// Handles replay analysis requests from the session panel.
+    /// </summary>
+    private void OnReplayAnalysisRequested(StoredSessionPlay play)
+    {
+        if (string.IsNullOrEmpty(play.ReplayPath) || !File.Exists(play.ReplayPath))
+        {
+            Logger.Info("[MainScreen] Replay file not available for analysis");
+            return;
+        }
+        
+        Logger.Info($"[MainScreen] Replay analysis requested: {play.ReplayPath}");
+        
+        // Raise event for CompanellaGame to handle
+        ReplayAnalysisRequested?.Invoke(play.ReplayPath);
+    }
+    
+    /// <summary>
+    /// Handles beatmap analysis requests from the session panel (right-click).
+    /// </summary>
+    private void OnBeatmapAnalysisRequested(StoredSessionPlay play)
+    {
+        if (string.IsNullOrEmpty(play.BeatmapPath) || !File.Exists(play.BeatmapPath))
+        {
+            Logger.Info("[MainScreen] Beatmap file not available for analysis");
+            return;
+        }
+        
+        Logger.Info($"[MainScreen] Beatmap analysis requested: {play.BeatmapPath}");
+        
+        // Load the beatmap as if it was dropped
+        HandleFileDrop(play.BeatmapPath);
+    }
+    
+    /// <summary>
+    /// Event raised when replay analysis is requested.
+    /// </summary>
+    public event Action<string>? ReplayAnalysisRequested;
 
     private Container CreateMappingTab()
     {
@@ -380,6 +421,11 @@ public partial class MainScreen : osu.Framework.Screens.Screen
                     {
                         // UI Scale settings
                         new UIScalePanel
+                        {
+                            RelativeSizeAxes = Axes.X
+                        },
+                        // Metadata display preference
+                        new MetadataPreferencePanel
                         {
                             RelativeSizeAxes = Axes.X
                         },

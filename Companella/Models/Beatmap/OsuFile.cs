@@ -69,6 +69,28 @@ public class OsuFile
     /// Gets a formatted display name for the beatmap.
     /// </summary>
     public string DisplayName => $"{DisplayArtist} - {DisplayTitle} [{Version}]";
+    
+    /// <summary>
+    /// Gets the title based on preference.
+    /// </summary>
+    /// <param name="preferRomanized">If true, returns romanized title; otherwise unicode if available.</param>
+    public string GetTitle(bool preferRomanized) => preferRomanized 
+        ? (!string.IsNullOrEmpty(Title) ? Title : TitleUnicode)
+        : (!string.IsNullOrEmpty(TitleUnicode) ? TitleUnicode : Title);
+    
+    /// <summary>
+    /// Gets the artist based on preference.
+    /// </summary>
+    /// <param name="preferRomanized">If true, returns romanized artist; otherwise unicode if available.</param>
+    public string GetArtist(bool preferRomanized) => preferRomanized 
+        ? (!string.IsNullOrEmpty(Artist) ? Artist : ArtistUnicode)
+        : (!string.IsNullOrEmpty(ArtistUnicode) ? ArtistUnicode : Artist);
+    
+    /// <summary>
+    /// Gets a formatted display name based on preference.
+    /// </summary>
+    /// <param name="preferRomanized">If true, uses romanized metadata; otherwise unicode if available.</param>
+    public string GetDisplayName(bool preferRomanized) => $"{GetArtist(preferRomanized)} - {GetTitle(preferRomanized)} [{Version}]";
 
     /// <summary>
     /// Gets the game mode name.

@@ -354,6 +354,8 @@ public partial class SessionDropdown : BasicDropdown<StoredSession?>
 {
     public SessionDropdown()
     {
+        // Override default AutoSizeAxes to allow manual width control
+        AutoSizeAxes = Axes.None;
     }
     
     protected override LocalisableString GenerateItemText(StoredSession? item)

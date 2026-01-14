@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using OsuMemoryDataProvider;
 using OsuMemoryDataProvider.OsuMemoryModels;
 using OsuMemoryDataProvider.OsuMemoryModels.Direct;
@@ -45,6 +46,10 @@ public class SessionTrackerService : IDisposable
     private int _audioTimeStuckCount;
     private bool _isPaused;
     private const int PauseDetectionThreshold = 3; // Consecutive identical AudioTime readings to detect pause
+    
+    // Miss tracking
+    private int _lastMissCount;
+    private int _currentMissCount;
     
     // Configuration
     private const int PollIntervalMs = 150;
@@ -297,6 +302,7 @@ public class SessionTrackerService : IDisposable
         int currentStatus;
         int currentAudioTime = 0;
         double playerAccuracy = 0;
+        int missCount = 0;
         
         // Use lock to prevent concurrent access with HitErrorReaderService
         lock (HitErrorReaderService.MemoryReaderLock)
@@ -313,11 +319,12 @@ public class SessionTrackerService : IDisposable
                 currentStatus = generalData.RawStatus;
                 currentAudioTime = generalData.AudioTime;
                 
-                // Also read player data to track accuracy during gameplay
+                // Also read player data to track accuracy and misses during gameplay
                 var player = new Player();
                 if (_memoryReader.TryRead(player))
                 {
                     playerAccuracy = player.Accuracy;
+                    missCount = player.HitMiss;
                 }
             }
             catch (Exception ex)
@@ -377,22 +384,26 @@ public class SessionTrackerService : IDisposable
                 Logger.Info($"[Session] Status changed: {_previousStatus} -> {currentStatus}");
             }
             
-            // Track accuracy during gameplay
+            // Track accuracy and misses during gameplay
             if (_wasPlaying && playerAccuracy > 0)
             {
                 _lastAccuracy = playerAccuracy;
+            }
+            if (_wasPlaying && missCount > 0)
+            {
+                _currentMissCount = missCount;
             }
             
             // Detect transition from Playing to Results or SongSelect
             if (_wasPlaying && currentStatus != STATUS_PLAYING)
             {
-                Logger.Info($"[Session] Detected end of play, status: {currentStatus}, last accuracy: {_lastAccuracy:F2}%");
+                Logger.Info($"[Session] Detected end of play, status: {currentStatus}, last accuracy: {_lastAccuracy:F2}%, misses: {_currentMissCount}");
                 
                 // Player just finished playing (or quit)
                 if (currentStatus == STATUS_RESULTS)
                 {
                     // Successfully completed the map - record the play
-                    OnMapCompleted();
+                    OnMapCompleted(PlayStatus.Completed);
                     
                     // Fire results screen entered event for timing deviation analysis
                     var beatmapPath = _currentPlayingBeatmap ?? _processDetector.GetBeatmapFromMemory();
@@ -403,8 +414,20 @@ public class SessionTrackerService : IDisposable
                 }
                 else if (currentStatus == STATUS_SONGSELECT)
                 {
-                    // Player quit/failed - don't record
-                    Logger.Info("[Session] Play quit/failed - not recording");
+                    // Player quit or failed - record as quit/failed
+                    // We record it if they played at all (accuracy > 0)
+                    if (_lastAccuracy > 0)
+                    {
+                        // Determine if it was a fail (HP drained) or quit
+                        // For now, we'll treat going back to song select as a quit
+                        // A proper fail detection would need HP tracking
+                        Logger.Info($"[Session] Play quit - recording with current stats");
+                        OnMapCompleted(PlayStatus.Quit);
+                    }
+                    else
+                    {
+                        Logger.Info("[Session] Play quit before any progress - not recording");
+                    }
                 }
                 
                 // Fire pause event if player paused during this play
@@ -418,6 +441,7 @@ public class SessionTrackerService : IDisposable
                 _currentPlayingBeatmap = null;
                 _lastAccuracy = 0;
                 _currentPlayRate = 1.0f;
+                _currentMissCount = 0;
                 
                 // Reset pause tracking for next play
                 _pauseCount = 0;
@@ -432,6 +456,7 @@ public class SessionTrackerService : IDisposable
                 _currentPlayingBeatmap = _processDetector.GetBeatmapFromMemory();
                 _currentPlayRate = _processDetector.GetCurrentRateFromMods();
                 _lastAccuracy = 0;
+                _currentMissCount = 0;
                 
                 // Reset pause tracking for new play
                 _pauseCount = 0;
@@ -482,26 +507,36 @@ public class SessionTrackerService : IDisposable
     }
     
     /// <summary>
-    /// Called when a map is completed. Reads accuracy and triggers MSD analysis.
+    /// Called when a map is completed, quit, or failed. Reads accuracy and triggers MSD analysis.
     /// </summary>
-    private void OnMapCompleted()
+    /// <param name="status">The play status (Completed, Failed, Quit).</param>
+    private void OnMapCompleted(PlayStatus status)
     {
         try
         {
             // Try to read accuracy from player data, fall back to last recorded accuracy
             double accuracy = _lastAccuracy;
+            int misses = _currentMissCount;
             
             lock (HitErrorReaderService.MemoryReaderLock)
             {
                 var player = new Player();
-                if (_memoryReader.TryRead(player) && player.Accuracy > 0)
+                if (_memoryReader.TryRead(player))
                 {
-                    accuracy = player.Accuracy;
-                    Logger.Info($"[Session] Read accuracy from memory: {accuracy:F2}%");
-                }
-                else
-                {
-                    Logger.Info($"[Session] Using last recorded accuracy: {accuracy:F2}%");
+                    if (player.Accuracy > 0)
+                    {
+                        accuracy = player.Accuracy;
+                        Logger.Info($"[Session] Read accuracy from memory: {accuracy:F2}%");
+                    }
+                    else
+                    {
+                        Logger.Info($"[Session] Using last recorded accuracy: {accuracy:F2}%");
+                    }
+                    
+                    if (player.HitMiss >= 0)
+                    {
+                        misses = player.HitMiss;
+                    }
                 }
             }
             
@@ -522,11 +557,12 @@ public class SessionTrackerService : IDisposable
             }
             
             var rateInfo = Math.Abs(_currentPlayRate - 1.0f) > 0.01f ? $" @ {_currentPlayRate:F2}x" : "";
-            Logger.Info($"[Session] Map completed: {Path.GetFileName(beatmapPath)} - {accuracy:F2}%{rateInfo}");
-            StatusUpdated?.Invoke(this, $"Completed: {Path.GetFileName(beatmapPath)} ({accuracy:F2}%){rateInfo}");
+            var statusStr = status == PlayStatus.Completed ? "completed" : status == PlayStatus.Failed ? "failed" : "quit";
+            Logger.Info($"[Session] Map {statusStr}: {Path.GetFileName(beatmapPath)} - {accuracy:F2}%, {misses} misses{rateInfo}");
+            StatusUpdated?.Invoke(this, $"{char.ToUpper(statusStr[0])}{statusStr[1..]}: {Path.GetFileName(beatmapPath)} ({accuracy:F2}%){rateInfo}");
             
             // Analyze MSD with the rate used during play (this happens synchronously on the tracking thread)
-            AnalyzeAndRecordPlay(beatmapPath, accuracy, _currentPlayRate);
+            AnalyzeAndRecordPlay(beatmapPath, accuracy, misses, _pauseCount, status, _currentPlayRate);
         }
         catch (Exception ex)
         {
@@ -539,11 +575,32 @@ public class SessionTrackerService : IDisposable
     /// </summary>
     /// <param name="beatmapPath">Path to the beatmap file.</param>
     /// <param name="accuracy">Accuracy achieved on the play.</param>
+    /// <param name="misses">Number of misses during the play.</param>
+    /// <param name="pauseCount">Number of pauses during the play.</param>
+    /// <param name="status">Play status (Completed, Failed, Quit).</param>
     /// <param name="rate">Rate the map was played at (1.5 for DT, 0.75 for HT, 1.0 for normal).</param>
-    private void AnalyzeAndRecordPlay(string beatmapPath, double accuracy, float rate = 1.0f)
+    private void AnalyzeAndRecordPlay(string beatmapPath, double accuracy, int misses, int pauseCount, PlayStatus status, float rate = 1.0f)
     {
         float highestMsd = 0;
         string dominantSkillset = "unknown";
+        string beatmapHash = "";
+        
+        // Calculate beatmap hash
+        try
+        {
+            if (File.Exists(beatmapPath))
+            {
+                using var md5 = MD5.Create();
+                using var stream = File.OpenRead(beatmapPath);
+                var hashBytes = md5.ComputeHash(stream);
+                beatmapHash = BitConverter.ToString(hashBytes).Replace("-", "").ToLowerInvariant();
+                Logger.Info($"[Session] Beatmap hash: {beatmapHash}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Info($"[Session] Error calculating beatmap hash: {ex.Message}");
+        }
         
         try
         {
@@ -571,11 +628,15 @@ public class SessionTrackerService : IDisposable
             Logger.Info($"[Session] MSD analysis failed: {ex.Message}");
         }
         
-        // Create the play result
+        // Create the play result with all new fields
         var sessionTime = DateTime.UtcNow - _sessionStartTime;
         var playResult = new SessionPlayResult(
             beatmapPath,
+            beatmapHash,
             accuracy,
+            misses,
+            pauseCount,
+            status,
             sessionTime,
             DateTime.UtcNow,
             highestMsd,
@@ -593,7 +654,7 @@ public class SessionTrackerService : IDisposable
         
         // Raise event
         PlayRecorded?.Invoke(this, playResult);
-        Logger.Info($"[Session] Play #{PlayCount} recorded");
+        Logger.Info($"[Session] Play #{PlayCount} recorded - Grade: {playResult.Grade}");
     }
     
     /// <summary>

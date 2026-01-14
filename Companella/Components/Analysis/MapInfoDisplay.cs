@@ -62,6 +62,9 @@ public partial class MapInfoDisplay : CompositeDrawable
 
     [Resolved]
     private OsuProcessDetector ProcessDetector { get; set; } = null!;
+    
+    [Resolved]
+    private UserSettingsService UserSettings { get; set; } = null!;
 
     private string? _currentBackgroundPath;
     private OsuFile? _currentOsuFile;
@@ -320,9 +323,10 @@ public partial class MapInfoDisplay : CompositeDrawable
         // Hide not connected overlay when a map is loaded
         _notConnectedOverlay.FadeTo(0, 200);
         
-        // Use romanized (ASCII) variants for display
-        var artist = !string.IsNullOrEmpty(osuFile.Artist) ? osuFile.Artist : osuFile.ArtistUnicode;
-        var title = !string.IsNullOrEmpty(osuFile.Title) ? osuFile.Title : osuFile.TitleUnicode;
+        // Use metadata based on user preference
+        var preferRomanized = UserSettings.Settings.PreferRomanizedMetadata;
+        var artist = osuFile.GetArtist(preferRomanized);
+        var title = osuFile.GetTitle(preferRomanized);
         
         _artistTitleText.Text = $"{artist} - {title}";
         _mapperDiffText.Text = $"Mapped by {osuFile.Creator} [{osuFile.Version}]";
