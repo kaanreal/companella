@@ -32,11 +32,18 @@ public partial class CustomTitleBar : CompositeDrawable
     private SpriteText _titleText = null!;
     private WindowButton _closeButton = null!;
     private WindowButton _cameraButton = null!;
+    private bool _isDraggable = true;
+    private Action? _customCloseAction;
     
     /// <summary>
     /// Event raised when the camera/screenshot button is clicked.
     /// </summary>
     public event Action? ScreenshotRequested;
+    
+    /// <summary>
+    /// Event raised when the close button is clicked (if no custom close action is set).
+    /// </summary>
+    public event Action? CloseRequested;
 
     [Resolved]
     private GameHost Host { get; set; } = null!;
@@ -70,7 +77,12 @@ public partial class CustomTitleBar : CompositeDrawable
         // Create window control buttons
         _closeButton = CreateWindowButton("\u00D7", Anchor.TopRight, () =>
         {
-            Schedule(() => Host.Exit());
+            if (_customCloseAction != null)
+                _customCloseAction();
+            else if (CloseRequested != null)
+                CloseRequested();
+            else
+                Schedule(() => Host.Exit());
         }, isCloseButton: true);
         _closeButton.Anchor = Anchor.TopRight;
         _closeButton.Origin = Anchor.TopRight;
@@ -216,9 +228,34 @@ public partial class CustomTitleBar : CompositeDrawable
         return button;
     }
 
+    /// <summary>
+    /// Sets the title text.
+    /// </summary>
+    public void SetTitle(string title)
+    {
+        if (_titleText != null)
+            _titleText.Text = title;
+    }
+    
+    /// <summary>
+    /// Sets whether the title bar allows window dragging.
+    /// </summary>
+    public void SetDraggable(bool draggable)
+    {
+        _isDraggable = draggable;
+    }
+    
+    /// <summary>
+    /// Sets a custom action for the close button.
+    /// </summary>
+    public void SetCloseAction(Action? action)
+    {
+        _customCloseAction = action;
+    }
+    
     protected override bool OnMouseDown(MouseDownEvent e)
     {
-        if (e.Button == osuTK.Input.MouseButton.Left)
+        if (e.Button == osuTK.Input.MouseButton.Left && _isDraggable)
         {
             // Start native Windows window drag
             StartWindowDrag();

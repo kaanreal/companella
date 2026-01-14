@@ -146,7 +146,7 @@ public class MarathonCreatorService
             
             // Try to load from embedded resource
             var assembly = typeof(MarathonCreatorService).Assembly;
-            var resourceName = "Companella.Resources.Fonts.NotoSansSC-Bold.ttf";
+            var resourceName = "Companella.Resources.Fonts.NotoSansJP-Bold.ttf";
             
             using var stream = assembly.GetManifestResourceStream(resourceName);
             if (stream != null)

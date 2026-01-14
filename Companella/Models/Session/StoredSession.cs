@@ -138,9 +138,34 @@ public class StoredSessionPlay
     public string BeatmapPath { get; set; } = string.Empty;
 
     /// <summary>
+    /// MD5 hash of the beatmap file.
+    /// </summary>
+    public string BeatmapHash { get; set; } = string.Empty;
+
+    /// <summary>
     /// The accuracy achieved (0.0 to 100.0).
     /// </summary>
     public double Accuracy { get; set; }
+
+    /// <summary>
+    /// Number of misses during this play.
+    /// </summary>
+    public int Misses { get; set; }
+
+    /// <summary>
+    /// Number of times the player paused during this play.
+    /// </summary>
+    public int PauseCount { get; set; }
+
+    /// <summary>
+    /// The grade achieved (SS, S, A, B, C, D, F, Q).
+    /// </summary>
+    public string Grade { get; set; } = "D";
+
+    /// <summary>
+    /// Status of the play (Completed, Failed, Quit).
+    /// </summary>
+    public PlayStatus Status { get; set; } = PlayStatus.Completed;
 
     /// <summary>
     /// Time since session start when this play was recorded.
@@ -163,6 +188,16 @@ public class StoredSessionPlay
     public string DominantSkillset { get; set; } = string.Empty;
 
     /// <summary>
+    /// MD5 hash of the replay file (null until replay is found).
+    /// </summary>
+    public string? ReplayHash { get; set; }
+
+    /// <summary>
+    /// Full path to the replay file (null until replay is found).
+    /// </summary>
+    public string? ReplayPath { get; set; }
+
+    /// <summary>
     /// Gets the beatmap filename without path.
     /// </summary>
     public string BeatmapFileName => Path.GetFileName(BeatmapPath);
@@ -173,6 +208,11 @@ public class StoredSessionPlay
     public string SessionTimeFormatted => SessionTime.ToString(@"hh\:mm\:ss");
 
     /// <summary>
+    /// Whether this play has a replay file available.
+    /// </summary>
+    public bool HasReplay => !string.IsNullOrEmpty(ReplayPath) && File.Exists(ReplayPath);
+
+    /// <summary>
     /// Creates a StoredSessionPlay from a SessionPlayResult.
     /// </summary>
     public static StoredSessionPlay FromPlayResult(SessionPlayResult result, long sessionId)
@@ -181,11 +221,18 @@ public class StoredSessionPlay
         {
             SessionId = sessionId,
             BeatmapPath = result.BeatmapPath,
+            BeatmapHash = result.BeatmapHash,
             Accuracy = result.Accuracy,
+            Misses = result.Misses,
+            PauseCount = result.PauseCount,
+            Grade = result.Grade,
+            Status = result.Status,
             SessionTime = result.SessionTime,
             RecordedAt = result.RecordedAt,
             HighestMsdValue = result.HighestMsdValue,
-            DominantSkillset = result.DominantSkillset
+            DominantSkillset = result.DominantSkillset,
+            ReplayHash = result.ReplayHash,
+            ReplayPath = result.ReplayPath
         };
     }
 }

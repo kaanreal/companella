@@ -886,6 +886,35 @@ public class MapsDatabaseService : IDisposable
 
         return result;
     }
+    
+    /// <summary>
+    /// Gets a beatmap path by its MD5 file hash.
+    /// Fast single-lookup alternative to GetBeatmapPathsByHash().
+    /// </summary>
+    /// <param name="hash">The MD5 hash of the .osu file.</param>
+    /// <returns>The beatmap path if found, null otherwise.</returns>
+    public string? GetBeatmapPathByHash(string hash)
+    {
+        if (string.IsNullOrEmpty(hash))
+            return null;
+        
+        try
+        {
+            using var connection = new SqliteConnection(_connectionString);
+            connection.Open();
+
+            using var cmd = new SqliteCommand("SELECT BeatmapPath FROM Maps WHERE FileHash = @hash COLLATE NOCASE LIMIT 1", connection);
+            cmd.Parameters.AddWithValue("@hash", hash.ToLowerInvariant());
+            
+            var result = cmd.ExecuteScalar();
+            return result as string;
+        }
+        catch (Exception ex)
+        {
+            Logger.Info($"[MapsDB] Error looking up beatmap by hash: {ex.Message}");
+            return null;
+        }
+    }
 
     /// <summary>
     /// Checks if a file needs reindexing using cached metadata and file system info.

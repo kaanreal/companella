@@ -305,13 +305,13 @@ public class HitErrorReaderService
                     var hitObject = HitObject.Parse(line, keyCount);
                     if (hitObject != null)
                     {
-                        // Adjust for rate
-                        hitObjectTimes.Add(hitObject.Time / rate);
+                        // Use song time (no rate scaling needed - hit errors from memory are already in song time)
+                        hitObjectTimes.Add(hitObject.Time);
                         
                         // Add tail time for hold notes
                         if (hitObject.IsHold)
                         {
-                            hitObjectTimes.Add(hitObject.EndTime / rate);
+                            hitObjectTimes.Add(hitObject.EndTime);
                         }
                     }
                 }
